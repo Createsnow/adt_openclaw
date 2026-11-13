@@ -209,11 +209,11 @@ Dashboard：在自己电脑上 `ssh -N -L 18789:127.0.0.1:18789 YOUR_LINUX_USER@
 插件 id 已在 `plugins.allow` / `entries`（来自样例），现在安装：
 
 ```bash
-oc plugins install npm:@wecom/wecom-openclaw-plugin@2026.7.2 --force --accept-capabilities
+oc plugins install npm:@wecom/wecom-openclaw-plugin@<版本> --force --accept-capabilities
 oc plugins list     # @wecom/wecom-openclaw-plugin … enabled，version ≥ 2026.7.2
 ```
 
-不要用 `plugins update` 或 `doctor --fix` 装：catalog 钉在 2026.5.7，升不上去。版本细节见 [WeCom 通道插件接入手册.md](WeCom%20通道插件接入手册.md)。`load.paths` 不加企微目录。
+`<版本>` 取 npm 包页当时的 Version，必须 ≥ 2026.7.2。一定要带 `npm:` 前缀：不带前缀或用 `plugins update` 会装 catalog 钉死的旧版。不要用 `doctor --fix` 装。版本细节见 [WeCom 通道插件接入手册.md](WeCom%20通道插件接入手册.md) 第 5 节。`load.paths` 不加企微目录。
 
 写通道与路由（`${…}` 两侧单引号保留，否则 shell 会吃掉变量）：
 
