@@ -1,0 +1,11 @@
+{
+  "id": "oa-workflow-bridge",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "contracts": {
+    "tools": ["oa_workflow"]
+  }
+}

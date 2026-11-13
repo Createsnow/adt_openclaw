@@ -8,7 +8,7 @@ for secret in \
   model_base_url \
   model_id \
   model_ref \
-  oa_redis_password \
+  oa_mysql_password \
   oa_api_user_id \
   oa_app_secret \
   wecom_identity_corpid \
@@ -40,9 +40,8 @@ export XA_IT_WECOM_BOT_SECRET="$(tr -d '\n' < /run/secrets/wecom_bot_secret)"
 export WECOM_IDENTITY_CORPID="$(tr -d '\n' < /run/secrets/wecom_identity_corpid)"
 export WECOM_IDENTITY_SECRET="$(tr -d '\n' < /run/secrets/wecom_identity_secret)"
 
-# 连接redis
-REDIS_PASS="$(tr -d '\n' < /run/secrets/oa_redis_password)"
-export OA_REDIS_URL="redis://:${REDIS_PASS}@xa-redis:6379/0"
+# OA 桥接数据库（独立 MySQL）密码；主机 / 库名 / 账号在 bridge-config.json 的 mysql 段
+export OA_MYSQL_PASSWORD="$(tr -d '\n' < /run/secrets/oa_mysql_password)"
 
 # OA系统开门凭据
 export OA_API_USER_ID="$(tr -d '\n' < /run/secrets/oa_api_user_id)"

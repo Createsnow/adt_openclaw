@@ -133,12 +133,12 @@ Linux 服务器环境**跳过**以下 WSL / Windows 专属小节：
 | --- | --- |
 | 工作目录 | `~/xa`（必须在 Linux 家目录，不要放 `/mnt/c`） |
 | 容器名 | `xa-gateway` |
-| 镜像 | 默认 `openclaw/openclaw:latest`。本机若只有 `ghcr.io/openclaw/openclaw:latest`（安装手册方案 A 未 tag，或 yml 已写 ghcr），装依赖与 `image inspect` 都用那一串；`docker images` 没有 `openclaw/openclaw` 时不要去 Docker Hub 补拉。完整两条命令见 OA Redis 接入手册 4.2。生产建议钉版本，见 [第 8 节](#sec-08) |
+| 镜像 | 默认 `openclaw/openclaw:latest`。本机若只有 `ghcr.io/openclaw/openclaw:latest`（安装手册方案 A 未 tag，或 yml 已写 ghcr），装依赖与 `image inspect` 都用那一串；`docker images` 没有 `openclaw/openclaw` 时不要去 Docker Hub 补拉。完整命令见 OA 桥接接入手册 4.2。生产建议钉版本，见 [第 8 节](#sec-08) |
 | 网关端口 | 宿主 `18789` → 容器 `18789` |
 | 健康检查 URL | `http://127.0.0.1:18789/healthz` |
 | 容器内 CLI | `docker exec -it xa-gateway node dist/index.js <子命令>` |
 
-第二套业务把目录、容器名、端口换成 `~/xa-hr`、`xa-hr-gateway`、`18790`，命令结构相同。启用了 Redis 版 OA 时，Redis 在 **独立 compose** `~/xa-redis`（容器名仍为 `xa-redis`），见 [Redis 独立实例部署手册.md](Redis%20独立实例部署手册.md)。文中已标明「仅 Redis 环境」。
+第二套业务把目录、容器名、端口换成 `~/xa-hr`、`xa-hr-gateway`、`18790`，命令结构相同。OA 桥接的状态库是独立机器上的 MySQL（不在本机 compose 里），准备与备份见 [MySQL 数据库准备.md](MySQL%20数据库准备.md)。
 
 <a id="notes" name="notes"></a>
 
@@ -437,18 +437,11 @@ echo "===== 巡检脚本结束（OpenClaw CLI 请按第 3.4 节手动跑） ====
 EOF
 ```
 
-有 Redis 时在脚本后追加（独立 Redis 目录 `~/xa-redis`）。健康检查已含带密码的 `PING`，日常看 `ps` 即可：
+OA 状态库（独立 MySQL）的连通性看插件日志即可，不在本机巡检脚本里查：
 
 ```bash
-docker compose -f ~/xa-redis/docker-compose.yml ps xa-redis
-# 期望：Up (healthy)
-```
-
-只有 STATUS 不是 `healthy` 时，才看健康检查失败原因（不要用宿主机路径把密码再灌进 redis-cli）：
-
-```bash
-docker inspect --format '{{.State.Health.Status}}' xa-redis
-docker inspect --format '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}' xa-redis
+docker logs --since 24h xa-gateway 2>&1 | grep -E 'MySQL init failed|DB_UNAVAILABLE|sweep failed' | tail -n 5
+# 期望：无输出
 ```
 
 [← 2. 日常启停](#sec-02) · [↑ 目录](#toc) · [下一节 → 4. 日志](#sec-04)
@@ -482,12 +475,6 @@ docker logs --since 2026-08-31T00:00:00 --timestamps xa-gateway
 docker logs --since 24h xa-gateway 2>&1 | grep -Ei 'error|fatal|invalid|denied|breaker|unresolved|enoent|429'
 ```
 
-有 Redis：
-
-```bash
-docker compose -f ~/xa-redis/docker-compose.yml logs -f xa-redis
-docker compose -f ~/xa-redis/docker-compose.yml logs --tail 80 xa-redis
-```
 
 <a id="sec-04-2" name="sec-04-2"></a>
 
@@ -518,10 +505,10 @@ docker logs --since 24h xa-gateway 2>&1 | grep -E 'MEMORY.md|ENOENT'
 docker logs xa-gateway 2>&1 | grep -Ei 'Unknown model|unresolved|model_not_found|Missing env var'
 
 # OA 插件缺 npm 依赖（prepare 会失败，错误在 docker logs）
-docker logs --since 1h xa-gateway 2>&1 | grep -E 'Cannot find package .redis.|Redis init failed'
+docker logs --since 1h xa-gateway 2>&1 | grep -E "Cannot find (package|module) '(mysql2|jpeg-js|pngjs)'|MySQL init failed"
 ```
 
-`oa_workflow` 的 `OA_IDENTITY_*` **不会**出现在 `docker logs`。员工说「还不能提交到 OA」时，到会话 jsonl 抽工具 `code`，完整命令见 `OA_tool/身份适配器说明.md` 第 10.7 节。不要 `cat` 整份 jsonl（含加密 userid）。
+`oa_workflow` 的 `OA_IDENTITY_*` **不会**出现在 `docker logs`。员工说「还不能提交到 OA」时，到会话 jsonl 抽工具 `code`，完整命令见 `OA_tool/身份适配器说明.md` 第 9 节。不要 `cat` 整份 jsonl（含加密 userid）。
 
 <a id="sec-04-3" name="sec-04-3"></a>
 
@@ -540,7 +527,7 @@ docker logs --since 1h xa-gateway 2>&1 | grep -E 'Cannot find package .redis.|Re
 
 ### 4.4 日志把磁盘写满时
 
-现网 Gateway / Redis compose **已加** 日志轮转（`json-file`，单文件 20m，最多 5 个）。容器日志仍在：
+现网 Gateway compose **已加** 日志轮转（`json-file`，单文件 20m，最多 5 个）。容器日志仍在：
 
 ```text
 /var/lib/docker/containers/<容器ID>/<容器ID>-json.log
@@ -550,13 +537,12 @@ docker logs --since 1h xa-gateway 2>&1 | grep -E 'Cannot find package .redis.|Re
 
 ```bash
 docker inspect -f '{{json .HostConfig.LogConfig}}' xa-gateway
-docker inspect -f '{{json .HostConfig.LogConfig}}' xa-redis
 docker inspect -f '{{.LogPath}}' xa-gateway
 sudo ls -lh "$(docker inspect -f '{{.LogPath}}' xa-gateway)"
 docker system df
 ```
 
-应看到 `max-size` / `max-file`。盘仍满：先看 jsonl 与两处 `media/inbound`（[第 10.4 节](#sec-10-4)），不要删 ledger。应急（会丢掉该容器已有日志，不删 `~/xa`）：
+应看到 `max-size` / `max-file`。盘仍满：先看 jsonl 与两处 `media/inbound`（[第 10.4 节](#sec-10-4)），不要删 OA 台账。应急（会丢掉该容器已有日志，不删 `~/xa`）：
 
 ```bash
 cd ~/xa
@@ -605,19 +591,11 @@ docker compose up -d
 | 7 | 插件/通道 | [第 3.4 节](#sec-03-4) `plugins list` + `channels status --channel wecom` | enabled，无 `autostart suppressed` |
 | 8 | 无明文 Key 漂移 | `grep -R --exclude-dir=workspace -E 'sk-|dashscope|BotSecret|apiKey.: .[^$]' ~/xa/config/openclaw.json ~/xa/config/agents 2>/dev/null \| head` | 不应把真值搜出来；占位符 `${VAR}` 可以有 |
 
-有 Redis 时加（存活看 `ps` 的 healthy；下面是容量抽查，不是再 PING）：
+OA 状态库抽查（在能连 MySQL 的机器上执行，只读）：待对账单应为 0，有则按[第 12.5 节](#sec-12-5)处理。
 
-```bash
-docker compose -f ~/xa-redis/docker-compose.yml ps xa-redis
-docker compose -f ~/xa-redis/docker-compose.yml exec -T xa-redis \
-  sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" INFO memory'
-docker compose -f ~/xa-redis/docker-compose.yml exec -T xa-redis \
-  sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" INFO persistence'
-docker compose -f ~/xa-redis/docker-compose.yml exec -T xa-redis \
-  sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" DBSIZE'
+```sql
+SELECT status, COUNT(*) FROM xa_oa.oa_ticket GROUP BY status;
 ```
-
-`used_memory_human` 接近 `maxmemory`（默认示例 256mb）要扩容，不要为了腾地方执行 `FLUSHDB` / `FLUSHALL`。本机测试清空见 Redis 手册 **9.4**。
 
 <a id="sec-05-3" name="sec-05-3"></a>
 
@@ -657,8 +635,8 @@ docker compose -f ~/xa-redis/docker-compose.yml exec -T xa-redis \
 | `~/xa/workspace/` | 正在跑的容器 |
 | `~/xa/secrets/` | 能从 npm / 本仓库重装的插件源码 |
 | `~/xa/docker-compose.yml`、`entrypoint.sh` | — |
-| `~/xa/extensions/*/bridge-config.json` 等本地改过的配置 | 未改过的插件源码（`node_modules` 可按 OA Redis 手册 4.2 用官方镜像重装） |
-| `~/xa-redis/redis-data/` 与 `~/xa-redis/secrets/`（仅 Redis 环境） | — |
+| `~/xa/extensions/*/bridge-config.json` 等本地改过的配置 | 未改过的插件源码（`node_modules` 可按 OA 桥接接入手册 4.2 用官方镜像重装） |
+| OA 状态库 `xa_oa`（独立 MySQL 机器，按 [MySQL 数据库准备.md](MySQL%20数据库准备.md) 第 5 节 `mysqldump`） | — |
 
 **不要**把含 `secrets/` 的备份传到公共网盘、不要提交 git。备份文件权限应是 `600`，只放在本机或企业加密盘。
 
@@ -673,7 +651,7 @@ BACKUP_DIR="${HOME}/xa-backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "${BACKUP_DIR}"
 
-# 停服务再备 Redis 数据更稳；只备 config/workspace/secrets 时可以不停
+# 停服务再备更稳（staging 附件不再变化）；只备 config/workspace/secrets 时可以不停
 cd ~/xa
 docker compose stop
 
@@ -686,11 +664,7 @@ tar --exclude='xa/extensions/*/node_modules' \
     xa/config \
     xa/workspace \
     xa/secrets \
-    xa/extensions \
-    $(test -d "${HOME}/xa-redis/redis-data" && echo xa-redis/redis-data) \
-    $(test -d "${HOME}/xa-redis/secrets" && echo xa-redis/secrets) \
-    $(test -f "${HOME}/xa-redis/docker-compose.yml" && echo xa-redis/docker-compose.yml) \
-    $(test -f "${HOME}/xa-redis/redis-entrypoint.sh" && echo xa-redis/redis-entrypoint.sh)
+    xa/extensions
 
 chmod 600 "${BACKUP_DIR}/xa-${STAMP}.tar.gz"
 docker compose start
@@ -700,7 +674,7 @@ ls -lh "${BACKUP_DIR}/xa-${STAMP}.tar.gz"
 tar -tzf "${BACKUP_DIR}/xa-${STAMP}.tar.gz" | head
 ```
 
-没有 Redis 时，`test -d "${HOME}/xa-redis/redis-data"` 那一项会自动空掉，不必改命令。
+OA 状态库在独立 MySQL 上，不在这个 tar 里；按 MySQL 准备文档另做 `mysqldump`。
 
 只备份配置和密钥、不停机（插件源码可从本仓库重拷）：
 
@@ -741,14 +715,14 @@ sudo chown -R 1000:1000 "${HOME}/xa"
 chmod 600 "${HOME}/xa/secrets/"*.txt
 chmod 755 "${HOME}/xa/entrypoint.sh"
 
-# 备份排除了 node_modules；按 OA Redis 接入手册 4.2 用官方镜像重装后再 up。
+# 备份排除了 node_modules；按 OA 桥接接入手册 4.2 用官方镜像重装后再 up。
 # 镜像名以 docker compose ps 的 IMAGE 列、以及 ~/xa/docker-compose.yml 的 image: 为准。
 # 本机没有 openclaw/openclaw、只有 ghcr.io/openclaw/openclaw:latest 时：
-# 用 OA Redis 接入手册 4.2 的「GHCR 名」整段，不要 docker pull openclaw/openclaw:latest。
+# 把下面最后一行镜像名换成那一串，不要 docker pull openclaw/openclaw:latest。
 docker run --rm --user 1000:1000 \
   -e HOME=/tmp \
   -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "${HOME}/xa/extensions/oa-workflow-bridge-redis:/app" \
+  -v "${HOME}/xa/extensions/oa-workflow-bridge:/app" \
   -w /app \
   openclaw/openclaw:latest \
   npm install --omit=dev
@@ -791,10 +765,10 @@ docker exec -it xa-gateway node dist/index.js models status
 | `wecom_bot_id.txt` / `wecom_bot_secret.txt` | `XA_IT_WECOM_*` | 企微管理后台重置 | 测收发；旧 Secret 会失效 |
 | `model_api_key.txt` | `XA_DOMESTIC_API_KEY` | 百炼控制台禁用旧 Key、建新 Key | 发一条对话；看是否 401 |
 | `model_base_url.txt` 等 | `XA_DOMESTIC_*` | 按百炼指南改 | `docker logs` 里 `agent model` 仍正确 |
-| `oa_redis_password.txt` | `OA_REDIS_URL` 里的密码 | 与 Redis 侧**内容**对齐，**路径独立** | 先改 `~/xa-redis/secrets/redis_password.txt` 并重建 Redis，再改本文件并重建 Gateway |
-| `oa_api_user_id.txt` | `OA_API_USER_ID` | OA 管理端人员资源 ID | **只读预检** Header `userid`；**不是**建单 Header。建单用 Redis `idmap` 的申请人。由 `oa-workflow-bridge-redis` 读取 |
+| `oa_mysql_password.txt` | `OA_MYSQL_PASSWORD` | DBA 在 MySQL 上改该账号密码 | 先在 MySQL 改密码，再改本文件并 `down && up` Gateway |
+| `oa_api_user_id.txt` | `OA_API_USER_ID` | OA 管理端人员资源 ID | **只读预检** Header `userid`；**不是**建单 Header。建单用身份转换得到的申请人。由 `oa-workflow-bridge` 读取 |
 | `oa_app_secret.txt` | `OA_APP_SECRET` | OA 控制台轮换 AppSecret | 旧值作废后再测预检 |
-| `wecom_identity_corpid.txt` / `wecom_identity_secret.txt` | `WECOM_IDENTITY_*` | 企微自建应用重置 | 与 BotSecret 分开；测 `prepare` 能写/读 `idmap` |
+| `wecom_identity_corpid.txt` / `wecom_identity_secret.txt` | `WECOM_IDENTITY_*` | 企微自建应用重置 | 与 BotSecret 分开；测 `prepare` 能查到申请人（`oa_identity` 有行） |
 
 生成新 Gateway Token：
 
@@ -1009,7 +983,7 @@ docker logs -f --timestamps xa-gateway
 | secret 文件内容 | 要 down/up | 同上 |
 | compose / entrypoint | 要 down/up | 同上 |
 | workspace 规则文件（`AGENTS.md` 等） | 一般不用重启 | 下一轮对话生效；异常再 restart |
-| 扩展目录里新拷插件 | 要 down/up | 先 `sudo chown -R 1000:1000 ~/xa/extensions`；OA Redis 插件还须按接入手册 **4.2** 用官方镜像装依赖，再 `down && up` |
+| 扩展目录里新拷插件 | 要 down/up | 先 `sudo chown -R 1000:1000 ~/xa/extensions`；OA 桥接插件还须按接入手册 **4.2** 用官方镜像装依赖，再 `down && up` |
 
 改完 json 先校验再重启：
 
@@ -1052,7 +1026,6 @@ cd ~/xa && docker compose restart xa-gateway
 ```bash
 docker stats --no-stream
 docker stats --no-stream xa-gateway
-docker stats --no-stream xa-gateway xa-redis
 
 # 宿主机（WSL）内存与磁盘
 free -h
@@ -1122,7 +1095,7 @@ docker image prune -f
 docker system prune -f
 ```
 
-**不要**日常执行 `docker system prune -a --volumes`：会删掉未在跑的镜像和未挂到当前容器的 volume。Redis 若曾改用命名卷，有丢数据风险。
+**不要**日常执行 `docker system prune -a --volumes`：会删掉未在跑的镜像和未挂到当前容器的 volume。若曾把数据改用命名卷，有丢数据风险。
 
 <a id="sec-10-3" name="sec-10-3"></a>
 
@@ -1187,7 +1160,7 @@ find ~/xa/config/media/inbound ~/xa/workspace/media/inbound \
   -type f -mmin +1440 -ls
 ```
 
-列表里不得出现 `staging`、`sessions`、`redis-data`、`AGENTS.md`。
+列表里不得出现 `staging`、`sessions`、`AGENTS.md`。
 
 装脚本（跑 Gateway 的同一 Linux 用户，不要 root）：
 
@@ -1317,7 +1290,7 @@ tail -n 20 ~/xa/logs/inbound-prune.log
 
 工位 WSL：03:15 时电脑休眠或没开 Ubuntu，这次会错过，下次开机后要等再一个 03:15。SmartX 虚机保持开机则按点跑。
 
-不要：`rm -rf ~/xa/workspace`；对工作区根目录 `find`；手删 `oa-workflow-bridge-redis/staging/`（未提交副本，插件 GC）；为腾盘删 ledger / `redis-data`。已进 OA 的附件在 Ecology，清 inbound 原件不影响已提交工单。
+不要：`rm -rf ~/xa/workspace`；对工作区根目录 `find`；手删 `oa-workflow-bridge/staging/`（未提交副本，插件 GC）；为腾盘删 `oa_ticket` 台账。已进 OA 的附件在 Ecology，清 inbound 原件不影响已提交工单。
 
 [← 9. 配置变更怎么落地](#sec-09) · [↑ 目录](#toc) · [下一节 → 11. 开机、睡眠、自愈](#sec-11)
 
@@ -1471,7 +1444,7 @@ Windows 开了 VPN **不等于** WSL 里的 dockerd 走 VPN。拉镜像失败用
 | 现象 | 命令 | 处理 |
 | --- | --- | --- |
 | `Cannot connect to the Docker daemon` | `systemctl is-active docker` | `sudo systemctl start docker`；组权限：`groups` 含 `docker`，否则 `wsl --shutdown` 后重进 |
-| 容器 `Restarting` (78) | `docker logs --tail 120 xa-gateway` | 按日志修 json（删 `meta`、去 wecom、补 `name`、OA 路径改成 `oa-workflow-bridge-redis`），再 `down && up` |
+| 容器 `Restarting` (78) | `docker logs --tail 120 xa-gateway` | 按日志修 json（删 `meta`、去 wecom、补 `name`、OA 路径改成 `oa-workflow-bridge`），再 `down && up` |
 | `docker exec` 进不去 | `docker compose ps` | 先让容器 `Up`，不要在 Restarting 时 exec |
 | 权限 denied 挂载目录 | `ls -ln ~/xa` | `sudo chown -R 1000:1000 ~/xa` |
 | 读 `/run/secrets` Permission denied | `stat ~/xa/secrets/*` | 适当放宽文件「其他用户可读」，或核对 `user: "1000:1000"` |
@@ -1496,26 +1469,25 @@ docker logs --tail 80 --timestamps xa-gateway
 | `/healthz` 不通但容器 Up | [第 3.3](#sec-03-3)、[3.5](#sec-03-5) 节 | `bind` 必须是 `lan`；entrypoint 与 json 一致 |
 | `meta: Invalid input` | `grep -n meta ~/xa/config/openclaw.json` | 安装手册 5.0，只删 `handoffTemplate` 等非法键 |
 | `plugin path not found` / `unknown channel id: wecom` | `ls ~/xa/extensions` | 安装手册 5.5 或企微指南 |
-| `plugin path not found: .../oa-workflow-bridge` | `ls ~/xa/extensions` | 路径必须是 `oa-workflow-bridge-redis`（OA Redis 手册 5.1）；旧 id 不要留 |
+| `plugin path not found: .../oa-workflow-bridge-redis` | `ls ~/xa/extensions` | 路径改成 `oa-workflow-bridge`（OA 桥接接入手册 5.1）；旧 id `oa-workflow-bridge-redis` / `wecom-oa-identity-adapter` 不要留 |
 | Gateway Up 但 `autostart suppressed` | [第 3.5 节](#sec-03-5)日志 | **[第 11.4 节](#sec-11-4)** RPC 覆盖或等 5 分钟；不要 `channels start --channel` |
 | 企微收不到 | [第 3.4 节](#sec-03-4) channels + [第 4.2 节](#sec-04-2) wecom grep | 企微指南第 13 节；`allowFrom` 测试环境含 `"*"` |
 | 发出去很久才回 | [第 4.2 节](#sec-04-2) `model-fetch` / `kind=final` | 百炼指南 §2.4、§6.7；企微指南 7.4 |
 | `Unknown model` / unresolved | `cat ~/xa/secrets/model_ref.txt; echo` | 前缀必须等于 json 里 `providers` 键名 |
 | `docker exec` 报 Missing env var | — | 可忽略，或用[第 3.4 节](#sec-03-4)带 `-e` 的命令 |
-| OA 预检失败 | 见下方 | 未配 OA 凭据或未按 4.2 装 `redis` 包；规则包与 `active` 见 OA Redis 手册第 10 节 |
-| 员工「确认准备失败」/ 日志 `Cannot find package 'redis'` | `ls ~/xa/extensions/*/node_modules/redis` | OA Redis 手册 4.2：现网已装齐；备份恢复或漏装适配器时两包都要重装，再 `compose up -d` |
+| OA 预检失败 | 见下方 | `DB_UNAVAILABLE` / `DB_SCHEMA_MISSING` 查 MySQL；其余是 OA 凭据或依赖，见 OA 桥接接入手册 8.2 / 10 |
+| 员工「确认准备失败」/ 日志 `Cannot find package 'mysql2'` 或 `MySQL init failed` | `ls ~/xa/extensions/oa-workflow-bridge/node_modules/mysql2` | 缺包按 OA 桥接接入手册 4.2 重装；连库失败按该手册第 10 节，再 `down && up` |
 | docker logs 出现 `smartsheet_get_records` | `grep alsoAllow ~/xa/config/openclaw.json` | WeCom 手册 9.2；现网旁路已清。不要为 OA 去重新授权文档 |
-| 员工「还不能提交到 OA」/ `OA_IDENTITY_NOT_CONFIGURED` | `docker logs` grep 不到该码是预期 | 身份适配器说明 10.7：先看 `WECOM_IDENTITY_FILES_OK` / `INJECTED`，再抽会话 jsonl |
-| 员工「OA 需要人工核对」/ `RECONCILIATION_REQUIRED` | Redis pending 为 `unknown` 或卡在 `submitting` | **[第 12.5 节](#sec-12-5)** 对账；禁止再点确认 |
+| 员工「还不能提交到 OA」/ `OA_IDENTITY_NOT_CONFIGURED` | `docker logs` grep 不到该码是预期 | 身份适配器说明第 9 节：先看 `WECOM_IDENTITY_FILES_OK` / `INJECTED`，再抽会话 jsonl |
+| 员工「OA 需要人工核对」/ `RECONCILIATION_REQUIRED` | `oa_ticket.status` 为 `unknown` 或卡在 `submitting` | **[第 12.5 节](#sec-12-5)** 对账；禁止再点确认 |
 
 OA 只读预检（**不会建单**）：
 
 ```bash
-docker exec -it xa-gateway node \
-  /home/node/.openclaw/extensions/oa-workflow-bridge-redis/scripts/readonly-preflight.mjs
+docker exec -it xa-gateway sh -c 'export OA_MYSQL_PASSWORD="$(tr -d "\n" < /run/secrets/oa_mysql_password)" OA_API_USER_ID="$(tr -d "\n" < /run/secrets/oa_api_user_id)" OA_APP_SECRET="$(tr -d "\n" < /run/secrets/oa_app_secret)"; node /home/node/.openclaw/extensions/oa-workflow-bridge/scripts/readonly-preflight.mjs'
 ```
 
-规则包已把 `oa_workflow` 加入 `tools.alsoAllow`（全局与 Agent 两处须一致），**不要**加入 `wecom_mcp`。现网是否调用 `doCreateRequest` 看实际加载的 `bridge-config.json`；切流核对见 OA Redis 手册第 10 节。不要移出白名单。不要把 `OA_BRIDGE_INACTIVE` 当成已建单。员工「确认准备失败」时，若日志有 `Cannot find package 'redis'` 再按手册 4.2 重装（现网已装齐）；不要先当 OA 接口故障。
+规则包已把 `oa_workflow` 加入 `tools.alsoAllow`（全局与 Agent 两处须一致），**不要**加入 `wecom_mcp`。现网是否调用 `doCreateRequest` 看实际加载的 `bridge-config.json`；接入核对见 OA 桥接接入手册第 5 / 8 节。不要移出白名单。不要把 `OA_BRIDGE_INACTIVE` 当成已建单。员工「确认准备失败」时，若日志有 `Cannot find package 'mysql2'` / `MySQL init failed` 再按 OA 桥接接入手册 4.2 / 第 10 节处理；不要先当 OA 接口故障。
 
 <a id="sec-12-4" name="sec-12-4"></a>
 
@@ -1536,7 +1508,7 @@ docker compose ps
 docker logs --tail 80 --timestamps xa-gateway
 ```
 
-日志是 `plugin path not found: .../oa-workflow-bridge`：json 的 allow / paths / entries 改成 `oa-workflow-bridge-redis`（见 OA Redis 手册 5.1），再 `up -d`。`Restarting` 时不要 `docker exec`。
+日志是 `plugin path not found: .../oa-workflow-bridge-redis`：json 的 allow / paths / entries 改成 `oa-workflow-bridge`（见 OA 桥接接入手册 5.1），再 `up -d`。`Restarting` 时不要 `docker exec`。
 
 <a id="sec-12-4-b" name="sec-12-4-b"></a>
 
@@ -1591,7 +1563,7 @@ sudo ls -lh "$(docker inspect -f '{{.LogPath}}' xa-gateway)"
 
 #### E. 误执行了 prune / down -v
 
-`docker compose down` **默认不删** 绑定挂载的 `~/xa/config` 等。`down -v` 会删 **compose 声明的 named volume**。当前安装手册用的是绑定挂载，一般还在；Redis 若改成 named volume，先看有没有备份。有备份走[第 6.3 节](#sec-06-3)。没有备份不要再 `prune --volumes`。
+`docker compose down` **默认不删** 绑定挂载的 `~/xa/config` 等。`down -v` 会删 **compose 声明的 named volume**。当前安装手册用的是绑定挂载，一般还在；若改成 named volume，先看有没有备份。有备份走[第 6.3 节](#sec-06-3)。没有备份不要再 `prune --volumes`。
 
 <a id="sec-12-5" name="sec-12-5"></a>
 
@@ -1601,62 +1573,58 @@ sudo ls -lh "$(docker inspect -f '{{.LogPath}}' xa-gateway)"
 
 OA 明确拒绝（`failed` / `OA_CREATE_REJECTED`）不是这条：那张确认单已经结束，员工改稿后直接报新问题即可。不要把拒绝和对账混成一步。
 
-契约与错误码仍以 [OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA%20Workflow%20Bridge（Redis）接入手册.md) **3.3 / 7.5** 为准。下面只写值班动作。
+契约与错误码以 [OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) **2.2 / 7.5 / 8.3** 为准。下面只写值班动作。所有 SQL 在能连 OA 状态库（独立 MySQL）的机器上执行，用有写权限的账号。
 
-#### 1. 查 Redis（点查，不要 `KEYS` / `SCAN` / `FLUSHDB`）
+#### 1. 查库（按确认号点查）
 
-确认号从当轮会话 jsonl 或员工刚收到的失败回执里取（`confirmationId`，形如 `OA-…`）。前缀以现网 `bridge-config.json` 的 `redis.keyPrefix` 为准，仓库默认 `oa-workflow-bridge`。
+确认号从当轮会话 jsonl 或员工刚收到的失败回执里取（`confirmationId`，形如 `OA-…`）。
 
-```bash
-cd ~/xa-redis
-# 密码只在容器内读 secret，不要打印出来
-CID='OA-把确认号贴这里'
+```sql
+SELECT confirmation_id, external_ticket_id, status, request_id, error_code, oa_requester_id,
+       FROM_UNIXTIME(created_at / 1000) AS created, FROM_UNIXTIME(updated_at / 1000) AS updated
+  FROM xa_oa.oa_ticket WHERE confirmation_id = 'OA-把确认号贴这里';
 
-docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:idx:confirmation:'"$CID"'"'
-# 上一步得到内部工单号 IT-… 后：
-TID='IT-把工单号贴这里'
-docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:pending:'"$CID"'"'
-docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:ledger:'"$TID"'"'
+-- 当前所有待对账
+SELECT confirmation_id, external_ticket_id, request_id, error_code, FROM_UNIXTIME(updated_at / 1000)
+  FROM xa_oa.oa_ticket WHERE status IN ('unknown', 'submitting');
 ```
 
-pending JSON 里有 `identity`、`submissionState`（`unknown` 或卡死的 `submitting`）、`oaRequesterId`。再用这个 `identity` 点查占位：
-
-```bash
-IDENT='pending 里的 identity'
-docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:person-pending:'"$IDENT"'"'
-```
-
-只看这四把钥匙。不要打印 OA 密码，不要 `DEL ledger`。
+`status` 是 `unknown`（或 Gateway 崩溃时卡住的 `submitting`）才走本节。`request_id` 有值说明 OA 已建单、只是本地没记上。
 
 #### 2. 对 Ecology
 
-用 pending 里的申请人人员 id（`oaRequesterId`）、大致时间、流程 **602**、标题前缀 `IT-YYYYMMDD-…`，看有没有**数字** `requestId`。有单以 OA 为准，不要再打 `doCreateRequest`。
+用 `oa_requester_id`（申请人人员 id）、`created` 时间、流程 **602**、标题前缀 `[IT-…]`（即 `external_ticket_id`），看有没有**数字** `requestId`。有单以 OA 为准，不要再打 `doCreateRequest`。
 
 #### 3. 有单：收成已提交
 
-把 ledger 写成 `submitted` 并写入数字 `requestId`，然后删草稿占位（与插件提交成功同一套键）。`idx:confirmation` **留下**，员工以后拿旧确认号查询会得到已提交。
-
-```bash
-# 先备份这四条 GET 的原文，再改
-# SET ledger 的 JSON：status=submitted，补 requestId，confirmationId / identity / session / externalTicketId 与原来一致
-docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DEL "oa-workflow-bridge:pending:'"$CID"'"'
-docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DEL "oa-workflow-bridge:person-pending:'"$IDENT"'"'
-# pending-idx 键是 oa-workflow-bridge:pending-idx:{identity}:{session}，session 在 pending JSON 里
+```sql
+UPDATE xa_oa.oa_ticket
+   SET status = 'submitted', request_id = '数字单号', active_sender = NULL,
+       draft_json = NULL, staged_json = NULL, updated_at = UNIX_TIMESTAMP() * 1000
+ WHERE confirmation_id = 'OA-…' AND status IN ('unknown', 'submitting');
 ```
 
-手工改 ledger **只允许这一节的对账收口**，禁止当日常清理。改完告诉员工数字工单号；这个人可以再报新问题。
+改完告诉员工数字工单号；`active_sender = NULL` 后这个人可以再报新问题，旧确认号再查得到 `ALREADY_SUBMITTED`。
 
 #### 4. 没单：放人重填
 
-ledger 改成 `failed`（或保持 `unknown` 但必须清掉 pending / person-pending，否则这个人一直开不了新单）。同一确认号再确认应得到 `OA_CREATE_REJECTED` 或仍是 `RECONCILIATION_REQUIRED`，都 **不要**再打 OA。让员工重新说明问题后 `prepare` 新单。
+```sql
+UPDATE xa_oa.oa_ticket
+   SET status = 'failed', error_code = 'RECONCILED_NOT_IN_OA', active_sender = NULL,
+       draft_json = NULL, staged_json = NULL, updated_at = UNIX_TIMESTAMP() * 1000
+ WHERE confirmation_id = 'OA-…' AND status IN ('unknown', 'submitting');
+```
+
+同一确认号再确认得到 `OA_CREATE_REJECTED`，不会再打 OA。让员工重新说明问题后 `prepare` 新单。本机 staging 目录会被插件定时回收。
 
 #### 禁止
 
 - 让员工对旧确认号再点「确认提交」
-- `FLUSHDB` / `FLUSHALL`、给 ledger 加 TTL、对 `pending:*` / `ledger:*` 做 `SCAN` 后批量删
+- 删 `oa_ticket` 行、改 `external_ticket_id`、批量 `UPDATE` 不带 `confirmation_id` 条件
 - 把 `unknown` 当成 `failed` 却不去 OA 核对（OA 里可能已经有单）
+- 改状态时忘了 `active_sender = NULL`（这个人会一直开不了新单）
 
-Gateway 在「正在提交」时崩溃、Redis 仍停在 `submitting`，也走本节，不要 `compose restart` 当重试。
+Gateway 在「正在提交」时崩溃、库里停在 `submitting`，也走本节，不要 `compose restart` 当重试。
 
 [← 12.4 应急速查](#sec-12-4) · [↑ 目录](#toc) · [下一节 → 13. 建议补进 compose 的运维项](#sec-13)
 
@@ -1672,7 +1640,7 @@ Gateway 在「正在提交」时崩溃、Redis 仍停在 `submitting`，也走�
 
 ### 13.1 Gateway 健康检查
 
-与 Redis 文档里的 `healthcheck` 对齐后，`docker compose ps` 才能出现 `healthy`。
+加了 `healthcheck` 后，`docker compose ps` 才能出现 `healthy`。
 
 ```yaml
     healthcheck:
@@ -1706,7 +1674,7 @@ docker compose ps
 
 ### 13.2 日志轮转（现网已加）
 
-Gateway 与 Redis 服务下均已挂：
+Gateway 服务下已挂：
 
 ```yaml
     logging:
@@ -1763,7 +1731,7 @@ docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 | 同一企微 Bot 只能一个 Gateway | 不要同时 `up` 两套挂了同一 `wecom_bot_*.txt` 的目录 |
 | 每套独立目录 | `cd ~/xa` 与 `cd ~/xa-hr` 分别操作，不要串 compose 文件 |
 | 端口 | IT `18789`，HR `18790`，测试 `18791` |
-| Redis 共用 | 不同 `database` / `keyPrefix`；禁止 `FLUSHALL` |
+| MySQL 共用 | 每套用不同库（`mysql.database`）和账号 |
 
 第二套日常命令示例：
 
@@ -1868,8 +1836,8 @@ Windows 防火墙：若必须让局域网访问 `18789`，只放行可信网段�
 | [OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md) | 内网 Linux 服务器安装；防火墙 / SSH 隧道；方案 B 用服务器自己的代理 |
 | [WeCom 通道插件接入手册.md](WeCom 通道插件接入手册.md) | 通道、allowFrom、思考中占位、插件升级 |
 | [DashScope 兼容 Provider 配置手册.md](DashScope 兼容 Provider 配置手册.md) | 慢回复、`thinkingFormat`、`MEMORY.md`、crash-loop |
-| [Redis 独立实例部署手册.md](Redis 独立实例部署手册.md) | 独立 Redis、健康检查、禁止 FLUSH、多业务 keyPrefix |
-| [OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA Workflow Bridge（Redis）接入手册.md) | OA 桥接插件接入与预检 |
+| [MySQL 数据库准备.md](MySQL%20数据库准备.md) | 独立 MySQL：建库、账号、网络、备份 |
+| [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) | OA 桥接插件接入与预检 |
 | [openclaw.json 配置参考.md](openclaw.json 配置参考.md) | 字段含义、热重载范围 |
 | [OpenClaw Gateway 部署拓扑与选型.md](OpenClaw Gateway 部署拓扑与选型.md) | 多套 compose、迁 Linux 服务器 |
 | [第三方凭据注入与配置中心演进.md](第三方凭据注入与配置中心演进.md) | 以后 Nacos 换 secret 文件来源 |

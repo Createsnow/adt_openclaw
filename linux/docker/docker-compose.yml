@@ -22,7 +22,7 @@ services:
       - model_base_url
       - model_id
       - model_ref
-      - oa_redis_password
+      - oa_mysql_password
       - oa_api_user_id
       - oa_app_secret
       - wecom_identity_corpid
@@ -47,12 +47,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
-    networks:
-      - xa-shared
-
-networks:
-  xa-shared:
-    external: true
 
 secrets:
   gateway_token:
@@ -69,8 +63,8 @@ secrets:
     file: ./secrets/model_id.txt
   model_ref:
     file: ./secrets/model_ref.txt
-  oa_redis_password:
-    file: ./secrets/oa_redis_password.txt
+  oa_mysql_password:
+    file: ./secrets/oa_mysql_password.txt
   oa_api_user_id:
     file: ./secrets/oa_api_user_id.txt
   oa_app_secret:

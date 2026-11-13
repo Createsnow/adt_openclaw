@@ -41,8 +41,8 @@
 - [阶段四：接入模型](#phase-4)
   - [12. 把模型写入 openclaw.json](#sec-12)
   - [13. 第二次 up：检查健康状态并查日志](#sec-13)
-- [阶段五：Redis 与 OA 插件](#phase-5)
-  - [14. 安装独立 Redis 实例](#sec-14)
+- [阶段五：MySQL 与 OA 插件](#phase-5)
+  - [14. 准备独立 MySQL](#sec-14)
     - [14.1–14.3 密码、compose、启动](#sec-14-1)
   - [15. 拷贝 OA 自定义插件](#sec-15)
   - [16. 安装 OA 插件依赖](#sec-16)
@@ -100,8 +100,8 @@ Gateway Token、企微 Bot、模型 API Key、`baseUrl` 等全部走 Docker Comp
 | --- | --- | --- |
 | 变量名 / `${VAR}` | [第 6 节](#sec-06)一次写齐 secrets | 字段含义见 [openclaw.json 配置参考.md](openclaw.json%20配置参考.md)；以后迁配置中心见 [第三方凭据注入与配置中心演进.md](第三方凭据注入与配置中心演进.md) |
 | 百炼模型字段 | [第 12 节](#sec-12)写入可启动的 catalog | [DashScope 兼容 Provider 配置手册.md](DashScope%20兼容%20Provider%20配置手册.md) |
-| 独立 Redis 生产加固 / 云实例 | [第 14 节](#sec-14)只起本机 `~/xa-redis` | [Redis 独立实例部署手册.md](Redis%20独立实例部署手册.md) |
-| OA 工具契约 / `bridge-config` / 错误码 | [第 15–19 节](#sec-15)只把插件装上并连上 Redis | [OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA%20Workflow%20Bridge（Redis）接入手册.md) |
+| 独立 MySQL 建库 / 授权 / 备份 | [第 14 节](#sec-14)只验连通、写密码文件 | [MySQL 数据库准备.md](MySQL%20数据库准备.md) |
+| OA 工具契约 / `bridge-config` / 错误码 | [第 15–19 节](#sec-15)只把插件装上并连上 MySQL | [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) |
 | 企微 catalog 钉死 /「思考中」 | [第 20–21 节](#sec-20)用命令装上并启用 | [WeCom 通道插件接入手册.md](WeCom%20通道插件接入手册.md) |
 | 装完之后的巡检、备份、升级 | [第 22 节](#sec-22)只给日常启停 | [OpenClaw Gateway Docker 运维手册.md](OpenClaw%20Gateway%20Docker%20运维手册.md) |
 
@@ -147,14 +147,14 @@ Gateway Token、企微 Bot、模型 API Key、`baseUrl` 等全部走 Docker Comp
 
 ## 安装链路总览
 
-主链是 **先起一个能健康响应的网关，再按层叠加模型 → Redis → OA 自定义插件 → 企微公共插件**。每一层 `up` 之后立刻查健康和日志，不要攒到最后一次验收。
+主链是 **先起一个能健康响应的网关，再按层叠加模型 → MySQL → OA 自定义插件 → 企微公共插件**。每一层 `up` 之后立刻查健康和日志，不要攒到最后一次验收。
 
 ```mermaid
 flowchart LR
   P1["阶段一 环境准备<br/>1–3"] --> P2["阶段二 工作区与凭据<br/>4–8"]
   P2 --> P3["阶段三 最小网关<br/>9–11"]
   P3 --> P4["阶段四 接入模型<br/>12–13"]
-  P4 --> P5["阶段五 Redis 与 OA<br/>14–19"]
+  P4 --> P5["阶段五 MySQL 与 OA<br/>14–19"]
   P5 --> P6["阶段六 企微通道<br/>20–21"]
 ```
 
@@ -167,22 +167,22 @@ flowchart LR
 5. [目录授权](#sec-05)（uid 1000）
 6. [配置全部凭据](#sec-06)（secrets，一次写齐）
 7. [配置 entrypoint.sh](#sec-07) ← **必须**：secrets 不会自动变成环境变量
-8. [配置 docker-compose.yml](#sec-08)（第一份：无 Redis 网络）
+8. [配置 docker-compose.yml](#sec-08)（第一份：无 OA 凭据）
 9. [最小 openclaw.json](#sec-09)（仅 gateway；无模型、无插件、无 channels）
 10. [docker pull](#sec-10)
 11. [第一次 up → 健康检查 + 日志](#sec-11) ← 只证明容器 / 端口 / Token 通
 12. [模型写入 openclaw.json](#sec-12)
 13. [第二次 up → 健康检查 + 日志](#sec-13) ← models status 不再 unresolved
-14. [独立 Redis 实例](#sec-14)（创建网络 xa-shared）
+14. [准备独立 MySQL](#sec-14)（DBA 建库授权；本机验连通、写密码文件）
 15. [拷贝 OA 自定义插件](#sec-15)
 16. [安装 OA 插件 npm 依赖](#sec-16) ← **必须**在 pull 之后；用官方镜像里的 Node
 17. [把 OA 配进 openclaw 并启用](#sec-17) ← 只改 json，禁止 up
-18. [升级 compose 共享网络 + entrypoint 拼 OA_REDIS_URL](#sec-18)
-19. [第三次 up → 健康检查 + 日志](#sec-19) ← 日志无 EAI_AGAIN xa-redis
+18. [接入 OA 凭据](#sec-18)（compose 挂 secret + entrypoint export）
+19. [第三次 up → 健康检查 + 日志](#sec-19) ← 日志有 `loaded (MySQL state)`，无 `MySQL init failed`
 20. [安装企微公共插件](#sec-20)
 21. [用命令配进 openclaw 并启用 → 核对终态 json](#sec-21)
 
-相对「创建 → 授权 → 凭据 → yml → pull → up → 模型 → up → Redis → 拷 OA → 装 OA → 启用 OA → 共享网络 → up → 装企微 → 启用企微」，有六处必须插入或必须提前：
+相对「创建 → 授权 → 凭据 → yml → pull → up → 模型 → up → MySQL → 拷 OA → 装 OA → 启用 OA → OA 凭据 → up → 装企微 → 启用企微」，有六处必须插入或必须提前：
 
 <a id="must-insert" name="must-insert"></a>
 
@@ -192,7 +192,7 @@ flowchart LR
 2. **必须有 `entrypoint.sh`。** OpenClaw 不读 `*_FILE` 这类变量；secret 文件要先 `export` 成 `${VAR}` 对应的环境变量。
 3. **第一次 `up` 之前必须有一份最小 `openclaw.json`。** 至少含 `gateway.auth.token`。不要在这一份里写 `plugins` / `channels.wecom` / 模型 catalog。
 4. **`docker pull` 必须在「安装 OA 依赖」之前。** `npm install` 用的是 `docker run ... openclaw/openclaw:latest npm install`，镜像不在本机就会去 Docker Hub 再拉一次，或直接失败。
-5. **启用 OA 插件之后、第三次 `up` 之前，必须先起独立 Redis，并把 Gateway 的 compose 加入同一 Docker 网络。** 插件一加载就会解析 `xa-redis`，未接线会刷 `EAI_AGAIN`。不要把 Redis 写进 `~/xa/docker-compose.yml`。
+5. **启用 OA 插件之后、第三次 `up` 之前，必须先让独立 MySQL 可连，并把 `OA_MYSQL_PASSWORD` 等 OA 凭据接进 compose / entrypoint。** 插件一加载就会连库建表，没接好会 `MySQL init failed`。
 6. **写 `channels.wecom` 之前必须先把公共插件装上并 enabled。** 通道 id 由插件注册；插件未装时写 `channels.wecom` 会 `unknown channel id`，容器 Restarting。
 
 <a id="json-evolution" name="json-evolution"></a>
@@ -241,7 +241,7 @@ curl -sS http://127.0.0.1:18789/healthz
 | 谁 | 管什么 |
 | --- | --- |
 | 平台运维（SmartX） | 虚机规格（CPU / 内存 / 磁盘）、存储、VLAN / 出网、快照 |
-| 本系统 | 虚机内的 Linux、Docker、`~/xa`、Redis、Gateway |
+| 本系统 | 虚机内的 Linux、Docker、`~/xa`、Gateway；独立 MySQL 由 DBA 维护 |
 
 不要把 Gateway 装进 SmartX 控制台或宿主机节点。内存或磁盘不够找平台扩虚机，不要用 compose `mem_limit` 代替。`~/xa` 必须在虚机本机盘上。出网（拉镜像、百炼、企微、OA）由平台网络策略决定。
 
@@ -449,7 +449,7 @@ ls -la ~/xa/config ~/xa/workspace ~/xa/extensions ~/xa/secrets
 
 本模块不要：
 
-- 拷 `oa-workflow-bridge-redis` / `wecom-oa-identity-adapter` / `wecom-openclaw-plugin`
+- 拷 `oa-workflow-bridge` / `wecom-openclaw-plugin`
 - 写 `openclaw.json` / secrets / compose
 - `npm install`
 - 对整棵 `~/xa` 做总 `chown`（下一章才授权）
@@ -524,7 +524,7 @@ chmod 600 ~/xa/secrets/*.txt 2>/dev/null || true
 
 ## 6. 配置全部凭据
 
-> **目标：** 8 个 secret 文件一次写齐。后面的 entrypoint、compose、`openclaw.json` 都按这一套变量工作。企微真值现在就可以写入；通道尚未启用时，这些变量只是被 entrypoint export，不影响先把网关拉起来。Redis 密码是第 14 节才有的第 9 个文件，不要提前写。
+> **目标：** 8 个 secret 文件一次写齐。后面的 entrypoint、compose、`openclaw.json` 都按这一套变量工作。企微真值现在就可以写入；通道尚未启用时，这些变量只是被 entrypoint export，不影响先把网关拉起来。OA 相关的 5 个 secret（MySQL 密码、OA 凭据、身份转换凭据）在第 14 / 18 节再写。
 
 **自检：**
 
@@ -587,7 +587,7 @@ sudo chown 1000:1000 ~/xa/secrets/*.txt
 
 > **目标：** 容器启动时从 `/run/secrets/` 读出全部凭据并 `export`，再启动网关。
 
-OpenClaw **不会**读取 `OPENCLAW_GATEWAY_TOKEN_FILE` 这类变量。没有本文件，`${VAR}` 全是空的。这一份还没有 Redis：`OA_REDIS_URL` 在第 18 节再加。`OPENCLAW_STATE_DIR` 现在就设，避免以后附件 staging 写到镜像内默认目录。
+OpenClaw **不会**读取 `OPENCLAW_GATEWAY_TOKEN_FILE` 这类变量。没有本文件，`${VAR}` 全是空的。这一份还没有 OA 凭据：`OA_MYSQL_PASSWORD` 等在第 18 节再加。`OPENCLAW_STATE_DIR` 现在就设，避免以后附件 staging 写到镜像内默认目录。
 
 **自检：**
 
@@ -617,7 +617,7 @@ sudo chown 1000:1000 ~/xa/entrypoint.sh
 
 `id -u` 不是 `1000` 时，用 `sudo tee ~/xa/entrypoint.sh >/dev/null` 写入 heredoc，再 `chmod` / `chown`。
 
-> **成功标准：** `test -f ~/xa/entrypoint.sh`；权限 `755`；属主 `1000:1000`；文件含上述 `export` 且以 `exec node dist/index.js gateway --bind lan --port 18789` 结尾；**还没有** `OA_REDIS_URL`。
+> **成功标准：** `test -f ~/xa/entrypoint.sh`；权限 `755`；属主 `1000:1000`；文件含上述 `export` 且以 `exec node dist/index.js gateway --bind lan --port 18789` 结尾；**还没有** `OA_MYSQL_PASSWORD`。
 
 [← 6. 配置全部凭据](#sec-06) · [↑ 目录](#toc) · [下一节 → 8. 配置 docker-compose.yml](#sec-08)
 
@@ -627,7 +627,7 @@ sudo chown 1000:1000 ~/xa/entrypoint.sh
 
 ## 8. 配置 docker-compose.yml
 
-> **目标：** 第一份即可用于第一次 `up` 的 compose（含全部 8 个 secret，**不含** Redis 网络）。
+> **目标：** 第一份即可用于第一次 `up` 的 compose（含全部 8 个 secret，**不含** OA 凭据）。
 
 **自检：**
 
@@ -648,7 +648,7 @@ ls ~/xa/secrets/*.txt
 
 冒号**右边**的 `/home/node/.openclaw` **不要改成** `/home/YOUR_LINUX_USER/xa`。
 
-不要把 Redis 写进这一份 yml。不要用 `env_file: .env` 传递 Token / BotSecret / 模型 Key。共享网络在第 18 节再加。
+不要用 `env_file: .env` 传递 Token / BotSecret / 模型 Key。OA 凭据在第 18 节再加。
 
 ```bash
 cat > ~/xa/docker-compose.yml <<'EOF'
@@ -711,7 +711,7 @@ sudo chown 1000:1000 ~/xa/docker-compose.yml
 
 `bind: lan` 在容器内等于听所有网卡；再经 `"18789:18789"` 会暴露到**服务器所有网卡**。靠防火墙 / 安全组收口，不要对 `0.0.0.0/0` 放行 18789。
 
-> **成功标准：** `~/xa/docker-compose.yml` 存在；`image` 为 `openclaw/openclaw:latest`；8 个 secret 都在 `services` 与底部 `secrets:` 里；**没有** `networks:` / `oa_redis_password`。
+> **成功标准：** `~/xa/docker-compose.yml` 存在；`image` 为 `openclaw/openclaw:latest`；8 个 secret 都在 `services` 与底部 `secrets:` 里；**没有** `oa_mysql_password` 等 OA secret。
 
 [← 7. 配置 entrypoint.sh](#sec-07) · [↑ 目录](#toc) · [下一节 → 9. 最小 openclaw.json（仅网关）](#sec-09)
 
@@ -1132,55 +1132,38 @@ docker exec -it \
 
 > **成功标准：** `/healthz` 通；`models status` 不再 unresolved；`models list --provider bailian` 看得到 `${XA_DOMESTIC_MODEL_ID}` 对应模型。
 
-[← 12. 把模型写入 openclaw.json](#sec-12) · [↑ 目录](#toc) · [下一节 → 14. 安装独立 Redis 实例](#sec-14)
+[← 12. 把模型写入 openclaw.json](#sec-12) · [↑ 目录](#toc) · [下一节 → 14. 准备独立 MySQL](#sec-14)
 
 ---
 
 <a id="phase-5" name="phase-5"></a>
 
-> **阶段五 · Redis 与 OA 插件（第 14–19 节）**  
-> 先起独立 Redis 和 `xa-shared`，再拷插件、装依赖、改 json、接线，第三次 up。不要把 Redis 写进 Gateway 的 compose。
+> **阶段五 · MySQL 与 OA 插件（第 14–19 节）**  
+> 先确认独立 MySQL 可连，再拷插件、装依赖、改 json、接凭据，第三次 up。MySQL 不进 Gateway 的 compose。
 
 <a id="sec-14" name="sec-14"></a>
 
-## 14. 安装独立 Redis 实例
+## 14. 准备独立 MySQL
 
-> **目标：** 先起独立 Redis 容器 `xa-redis`，并创建 Docker 网络 `xa-shared`。本模块**还不改** Gateway 的 compose / entrypoint，也**还不拷** OA 插件。
+> **目标：** 独立机器上的 MySQL 已有库 `xa_oa` 和账号，Gateway 虚机能连到 3306；密码写成 secret 文件。本模块**还不改** Gateway 的 compose / entrypoint，也**还不拷** OA 插件。
 
-OA 桥接一加载就会连 Redis，与 `bridge-config.json` 的 `active` 无关。所以 Redis 必须在第 19 节第三次 `up`（加载 OA）之前就绪。未接线时日志会每秒刷：
+OA 桥接一加载就会连库并建表，与 `bridge-config.json` 的 `active` 无关。所以库必须在第 19 节第三次 `up`（加载 OA）之前就绪。
 
-```text
-[plugins] [oa-workflow-bridge-redis] Redis error: getaddrinfo EAI_AGAIN xa-redis
-```
-
-`EAI_AGAIN` 是 DNS 暂时失败：容器里没有名叫 `xa-redis` 的解析结果。
-
-**不要**把 Redis 服务写进 `~/xa/docker-compose.yml`，也不要 `depends_on: xa-redis`（两份 compose 跨项目找不到对方服务）。**不要**在 Gateway 容器里写 `127.0.0.1:6379`（那是网关自己，不是 Redis）。
-
-生产加固、云实例、AOF、备份见 [Redis 独立实例部署手册.md](Redis%20独立实例部署手册.md)。本步安装命令也以该手册 **第 3 节**为准。
-
-**自检：**
+建库、授权、`bind-address`、防火墙按 [MySQL 数据库准备.md](MySQL%20数据库准备.md) 第 1–2 节，由 DBA 在 MySQL 机器上做。本机只做：
 
 ```bash
-test -d ~/xa/secrets
-docker compose version
+nc -vz <MySQL 主机> 3306
 ```
-
-<a id="sec-14-1" name="sec-14-1"></a>
-
-### 14.1–14.3 密码、compose、启动
-
-正文（两份密码、entrypoint、独立 compose、`xa-shared`、`docker compose up`）以 [Redis 独立实例部署手册.md](Redis%20独立实例部署手册.md) **第 3 节**为准。本安装链不要把 Redis 写进 `~/xa/docker-compose.yml`。
-
-本步做完应同时满足：
 
 ```bash
-docker compose -f ~/xa-redis/docker-compose.yml ps
-docker network inspect xa-shared --format '{{.Name}} {{len .Containers}}'
-stat -c '%n %F %i' ~/xa-redis/secrets/redis_password.txt ~/xa/secrets/oa_redis_password.txt
+printf '%s' '<DBA 给的密码>' > ~/xa/secrets/oa_mysql_password.txt
 ```
 
-> **成功标准：** `xa-redis` 为 `healthy`；网络名 `xa-shared` 已存在；两个密码文件 inode 不同。Gateway 此时仍在自己的默认网络上跑，**还不必** `down`。
+```bash
+chmod 600 ~/xa/secrets/oa_mysql_password.txt
+```
+
+> **成功标准：** `nc` 显示 `succeeded` / `open`；`~/xa/secrets/oa_mysql_password.txt` 存在且权限 `600`。Gateway 此时**还不必** `down`。
 
 [← 13. 第二次 up：检查健康状态并查日志](#sec-13) · [↑ 目录](#toc) · [下一节 → 15. 拷贝 OA 自定义插件](#sec-15)
 
@@ -1190,35 +1173,26 @@ stat -c '%n %F %i' ~/xa-redis/secrets/redis_password.txt ~/xa/secrets/oa_redis_p
 
 ## 15. 拷贝 OA 自定义插件
 
-> **目标：** 把桥接包和身份适配器放到 `~/xa/extensions/`。**只拷文件，不 npm install。**
+> **目标：** 把桥接插件放到 `~/xa/extensions/`，并填好它的 `bridge-config.json`。**只拷文件，不 npm install。**
 
-OA 桥接是自定义插件，必须挂进 `extensions`。身份适配器不进 `plugins.allow`，由桥接按相对路径 `import`；两包都要在，且后面都要有 `node_modules/redis`。开关在 `bridge-config.json` 的 `identity.adapter`，不是 `openclaw.json`。见 [OA_tool/身份适配器说明.md](OA_tool/身份适配器说明.md) 第 10 节。
-
-不要拷文件版 `oa-workflow-bridge`（无 `-redis` 后缀）。不要在本模块拷企微公共插件。
-
-**自检：**
-
-```bash
-test -d ~/xa/extensions || mkdir -p ~/xa/extensions
-docker compose -f ~/xa-redis/docker-compose.yml ps
-```
+身份转换已并入桥接（`src/identity/`），只有这一个目录。开关在 `bridge-config.json` 的 `identity.adapter`。不要再拷旧的 `oa-workflow-bridge-redis` / `wecom-oa-identity-adapter`。不要在本模块拷企微公共插件。
 
 ```bash
 REPO="$HOME/handoff/xa"
 
-cp -r "$REPO/OA_tool/oa-workflow-bridge-redis" ~/xa/extensions/
-cp -r "$REPO/OA_tool/wecom-oa-identity-adapter" ~/xa/extensions/
+mkdir -p ~/xa/extensions
+cp -r "$REPO/OA_tool/oa-workflow-bridge" ~/xa/extensions/
+rm -rf ~/xa/extensions/oa-workflow-bridge/node_modules
 
 sudo chown -R 1000:1000 ~/xa/extensions
-ls ~/xa/extensions/oa-workflow-bridge-redis
-ls ~/xa/extensions/wecom-oa-identity-adapter
+ls ~/xa/extensions/oa-workflow-bridge
 ```
 
-桥接目录应有 `openclaw.plugin.json` 或 `package.json`。`bridge-config.json` 的 `active` 保持 `false`。本模块只拷文件，不要在这里写 `OA_REDIS_URL`，不要 `up` Gateway。
+编辑 `~/xa/extensions/oa-workflow-bridge/bridge-config.json`：`mysql.host` / `user` / `database` 填 DBA 给的值（**不写密码**）；`appId` / `publicKeySpkiBase64` 填 OA 侧给的值；`active` 初装保持 `false`。字段说明见 [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) 5.2。
 
-> **成功标准：** 两个目录都在 `~/xa/extensions/`；属主 `1000:1000`；`active` 仍为 `false`。
+> **成功标准：** 目录在 `~/xa/extensions/oa-workflow-bridge`；属主 `1000:1000`；`bridge-config.json` 的 `mysql.host` 不是占位符；`active` 仍为 `false`。
 
-[← 14. 安装独立 Redis 实例](#sec-14) · [↑ 目录](#toc) · [下一节 → 16. 安装 OA 插件依赖](#sec-16)
+[← 14. 准备独立 MySQL](#sec-14) · [↑ 目录](#toc) · [下一节 → 16. 安装 OA 插件依赖](#sec-16)
 
 ---
 
@@ -1226,65 +1200,34 @@ ls ~/xa/extensions/wecom-oa-identity-adapter
 
 ## 16. 安装 OA 插件依赖
 
-> **目标：** 桥接和身份适配器都出现 `node_modules/redis`。
+> **目标：** 桥接出现 `node_modules/mysql2`、`jpeg-js`、`pngjs`。
 
-这是一次性容器（`--rm`）：只借官方镜像里的 Node 22+ 把 `node_modules` 写进挂载目录，**不是**再起一套 Gateway。宿主不要 `apt install npm`。不要等 Gateway 加载插件之后再 `docker exec` 补装：插件加载时已需要 `redis`。
+这是一次性容器（`--rm`）：只借官方镜像里的 Node 22+ 把 `node_modules` 写进挂载目录，**不是**再起一套 Gateway。宿主不要 `apt install npm`。不要等 Gateway 加载插件之后再 `docker exec` 补装。缺包现象与约定见接入手册 **4.2**。
 
-完整约定（Hub 名 / GHCR 名、禁止事项、缺包现象）以 [OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA%20Workflow%20Bridge（Redis）接入手册.md) **第 4.2 节** 为正文。下面是安装链上要跑的命令。
-
-只装桥接、不装适配器，idmap miss 时仍会 `Cannot find package 'redis'`。缺包时日志仍可能有 `loaded (Redis state)`，紧接着 `Redis init failed: Cannot find package 'redis'`，员工侧「确认准备失败」，工单号已生成但 pending 未写入 Redis。这不是独立 Redis 挂了。
-
-**自检：**
+Docker 按「仓库名:标签」匹配，不按内容。先看本机实际名字：
 
 ```bash
-ls ~/xa/extensions/oa-workflow-bridge-redis
-ls ~/xa/extensions/wecom-oa-identity-adapter
 docker images | grep openclaw
 ```
 
-Docker 按「仓库名:标签」匹配，不按内容。先看本机实际名字，再选命令：
-
-| 本机实际名字 | 用哪条 |
-| --- | --- |
-| `openclaw/openclaw:latest` | 下面「Hub 名」 |
-| 只有 `ghcr.io/openclaw/openclaw:latest` | 下面「GHCR 名」，或先 `docker tag` 再走 Hub 名 |
-
-`docker images` **没有** `openclaw/openclaw` 时：不是缺镜像。不要 `docker pull openclaw/openclaw:latest`。用 GHCR 名整段。
-
-**Hub 名：**
+本机有 `openclaw/openclaw:latest` 用下面这条；只有 `ghcr.io/openclaw/openclaw:latest` 时把最后一行镜像换成它（不要 `docker pull openclaw/openclaw:latest`）：
 
 ```bash
-sudo chown -R 1000:1000 ~/xa/extensions
-
-docker run --rm --user 1000:1000 \
-  -e HOME=/tmp \
-  -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/xa/extensions/oa-workflow-bridge-redis:/app" \
-  -w /app \
-  openclaw/openclaw:latest \
-  npm install --omit=dev
-
-docker run --rm --user 1000:1000 \
-  -e HOME=/tmp \
-  -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/xa/extensions/wecom-oa-identity-adapter:/app" \
-  -w /app \
+docker run --rm --user 1000:1000 -e HOME=/tmp -e NPM_CONFIG_CACHE=/tmp/npm-cache \
+  -v "$HOME/xa/extensions/oa-workflow-bridge:/app" -w /app \
   openclaw/openclaw:latest \
   npm install --omit=dev
 ```
-
-**GHCR 名：** 把上面两条最后的镜像改成 `ghcr.io/openclaw/openclaw:latest`。
 
 国内 npm 超时，在 `npm install --omit=dev` 后面追加 `--registry=https://registry.npmmirror.com`。
 
 ```bash
-ls ~/xa/extensions/oa-workflow-bridge-redis/node_modules/redis
-ls ~/xa/extensions/wecom-oa-identity-adapter/node_modules/redis
+ls ~/xa/extensions/oa-workflow-bridge/node_modules/{mysql2,jpeg-js,pngjs}
 ```
 
-也可以在已装好的 Linux x64 机器上把两个目录（均含 `node_modules`）拷过来，生产机不必连 npm。`redis` 客户端为纯 JS。再装时机：目录被清空、从备份恢复（备份通常排除 `node_modules`）、`package.json` 依赖变更。
+也可以在已装好的 Linux x64 机器上把整个目录（含 `node_modules`）拷过来，生产机不必连 npm。再装时机：目录被清空、从备份恢复（备份通常排除 `node_modules`）、`package.json` 依赖变更。
 
-> **成功标准：** 两个 `node_modules/redis` 目录都存在。本模块不 `up`。
+> **成功标准：** 三个包目录都存在。本模块不 `up`。
 
 [← 15. 拷贝 OA 自定义插件](#sec-15) · [↑ 目录](#toc) · [下一节 → 17. 把 OA 配进 openclaw 并启用](#sec-17)
 
@@ -1294,68 +1237,62 @@ ls ~/xa/extensions/wecom-oa-identity-adapter/node_modules/redis
 
 ## 17. 把 OA 配进 openclaw 并启用
 
-> **目标：** 在「含模型」配置上加入 OA 桥接插件。身份适配器**不要**写入 `plugins.allow` / `load.paths` / `alsoAllow`。
+> **目标：** 在「含模型」配置上加入 OA 桥接插件。
 
-改 `plugins.load.paths` 后必须 `docker compose down && docker compose up -d` 才生效。**本模块只改 json，禁止在这里 `up`。** 现在 up 会加载插件并去解析 `xa-redis`，而 Gateway 还没加入 `xa-shared`。
-
-**自检：**
-
-```bash
-test -f ~/xa/config/openclaw.json
-ls ~/xa/extensions/oa-workflow-bridge-redis/node_modules/redis
-ls ~/xa/extensions/wecom-oa-identity-adapter/node_modules/redis
-```
+改 `plugins.load.paths` 后必须 `docker compose down && docker compose up -d` 才生效。**本模块只改 json，禁止在这里 `up`。** 现在 up 会加载插件去连库，而 Gateway 还没拿到 `OA_MYSQL_PASSWORD`。
 
 在第 12 节「含模型」的 json 上**追加** OA 桥接（不要整文件换成终态样例，以免把后面还没有的企微段提前写上）：
 
-- `plugins.allow` 只含 `oa-workflow-bridge-redis`
-- `plugins.load.paths` 只有 `/home/node/.openclaw/extensions/oa-workflow-bridge-redis`
-- `plugins.entries.oa-workflow-bridge-redis.enabled: true`（hooks 含 `allowConversationAccess`）
+- `plugins.allow` 只含 `oa-workflow-bridge`
+- `plugins.load.paths` 只有 `/home/node/.openclaw/extensions/oa-workflow-bridge`
+- `plugins.entries.oa-workflow-bridge.enabled: true`（hooks 含 `allowConversationAccess`）
 - 全局与 Agent 两处 `tools.alsoAllow` 仅 `oa_workflow`
-- **不要**写 `wecom-openclaw-plugin`、`channels.wecom`、`wecom-oa-identity-adapter`
+- **不要**写 `wecom-openclaw-plugin`、`channels.wecom`
 
-字段形状对照仓库 [`openclaw/openclaw.json`](openclaw/openclaw.json) 的 `plugins` / `tools` 段。改 `load.paths` 后必须 `down && up` 才生效，**本模块禁止 up**（Gateway 还没加入 `xa-shared`）。
+字段形状对照仓库 [`workspace-rules/openclaw.json`](workspace-rules/openclaw.json) 的 `plugins` / `tools` 段。插件已加载只表示登记了 `oa_workflow`；`active=false` 时工具在，但不会真正建单。
 
-插件已加载只表示登记了 `oa_workflow`；`active=false` 时工具在，但不会真正建单。
+> **成功标准：** json 含 `oa-workflow-bridge` 且 `enabled: true`；`load.paths` 只有这一条；没有企微通道。本模块不 `up`。
 
-> **成功标准：** json 含 `oa-workflow-bridge-redis` 且 `enabled: true`；`load.paths` 只有这一条；**没有**企微通道与身份适配器插件登记。本模块不 `up`。
-
-[← 16. 安装 OA 插件依赖](#sec-16) · [↑ 目录](#toc) · [下一节 → 18. 配置 Gateway 共享网络](#sec-18)
+[← 16. 安装 OA 插件依赖](#sec-16) · [↑ 目录](#toc) · [下一节 → 18. 接入 OA 凭据](#sec-18)
 
 ---
 
 <a id="sec-18" name="sec-18"></a>
 
-## 18. 配置 Gateway 共享网络
+## 18. 接入 OA 凭据
 
-> **目标：** 让 Gateway 加入 `xa-shared`，由 entrypoint 拼出 `OA_REDIS_URL`。这样第 19 节加载 OA 插件时才能解析主机名 `xa-redis`。
+> **目标：** compose 挂上 OA 相关 secret，entrypoint 把它们 `export` 成插件读的环境变量。凭据注入方式与第 6–8 节相同。
 
-不要把带密码的 URL 写进 compose 的 `environment:`（`docker inspect` 能看到明文）。只读 Gateway 自己的 `/run/secrets/oa_redis_password`，不要读 Redis 容器的 secret。
+先写齐 secret 文件（权限 `600`）：
 
-**自检：**
+| secret 文件 | 环境变量 | 内容 |
+| --- | --- | --- |
+| `oa_mysql_password.txt` | `OA_MYSQL_PASSWORD` | 第 14 节已写 |
+| `oa_api_user_id.txt` | `OA_API_USER_ID` | OA 接口账号人员 id（只读预检用） |
+| `oa_app_secret.txt` | `OA_APP_SECRET` | OA AppSecret |
+| `wecom_identity_corpid.txt` | `WECOM_IDENTITY_CORPID` | 企业 corpid |
+| `wecom_identity_secret.txt` | `WECOM_IDENTITY_SECRET` | 自建应用 secret（不是机器人 BotSecret） |
 
-```bash
-test -f ~/xa/docker-compose.yml
-test -f ~/xa/entrypoint.sh
-test -f ~/xa/secrets/oa_redis_password.txt
-docker network inspect xa-shared --format '{{.Name}}'
+`~/xa/docker-compose.yml`：在 `services.xa-gateway.secrets` 与底部 `secrets:` 各加这 5 项（写法对照仓库 [`docker/docker-compose.yml`](docker/docker-compose.yml)）。
+
+`~/xa/entrypoint.sh`：在 `exec` 之前加（对照仓库 [`docker/entrypoint.sh`](docker/entrypoint.sh)，开头的 `missing or empty secret` 检查清单也补上这 5 个名字）：
+
+```sh
+export OA_MYSQL_PASSWORD="$(tr -d '\n' < /run/secrets/oa_mysql_password)"
+export OA_API_USER_ID="$(tr -d '\n' < /run/secrets/oa_api_user_id)"
+export OA_APP_SECRET="$(tr -d '\n' < /run/secrets/oa_app_secret)"
+export WECOM_IDENTITY_CORPID="$(tr -d '\n' < /run/secrets/wecom_identity_corpid)"
+export WECOM_IDENTITY_SECRET="$(tr -d '\n' < /run/secrets/wecom_identity_secret)"
 ```
 
-没有 `xa-shared` 时先回到第 14 节把 Redis 拉起来。
-
-entrypoint 拼 `OA_REDIS_URL`、Gateway compose 加入 `external: true` 的 `xa-shared`、挂 `oa_redis_password`：YAML 增量以 [OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA%20Workflow%20Bridge（Redis）接入手册.md) **5.5** 为准（连接契约也可对照 Redis 手册第 4 节）。不要把带密码的 URL 写进 compose 的 `environment:`。
-
-本步做完应能 `grep` 到：
+不要把密码写进 compose 的 `environment:` 或 `bridge-config.json`（`docker inspect` / 文件能看到明文）。不需要额外的 Docker 网络。
 
 ```bash
-grep -q 'xa-redis:6379' ~/xa/entrypoint.sh
-grep -q 'external: true' ~/xa/docker-compose.yml
-grep -q oa_redis_password ~/xa/docker-compose.yml
+grep -q oa_mysql_password ~/xa/docker-compose.yml
+grep -q OA_MYSQL_PASSWORD ~/xa/entrypoint.sh
 ```
 
-`bridge-config.json` 里 `redis.url` 可写成 `redis://xa-redis:6379/0`（不要写密码）。进程环境变量 `OA_REDIS_URL` 优先。`active` 初装仍保持 `false`。
-
-> **成功标准：** entrypoint 含 `OA_REDIS_URL=...@xa-redis:6379/0`；Gateway yml 有 `networks: xa-shared` 且 `external: true`；有 `oa_redis_password` secret。本模块不 `up`（下一章 `down && up`，只 `restart` 不够）。
+> **成功标准：** 5 个 secret 文件存在；compose 与 entrypoint 都能 `grep` 到。本模块不 `up`（下一章 `down && up`，只 `restart` 不够）。
 
 [← 17. 把 OA 配进 openclaw 并启用](#sec-17) · [↑ 目录](#toc) · [下一节 → 19. 第三次 up：检查健康状态并查日志](#sec-19)
 
@@ -1365,25 +1302,7 @@ grep -q oa_redis_password ~/xa/docker-compose.yml
 
 ## 19. 第三次 up：检查健康状态并查日志
 
-> **目标：** Gateway 与 Redis 同网，OA 插件能解析 `xa-redis`，日志不再刷 `EAI_AGAIN`。
-
-**自检：**
-
-```bash
-test -f ~/xa/secrets/oa_redis_password.txt
-grep -q xa-redis ~/xa/entrypoint.sh
-ls ~/xa/extensions/oa-workflow-bridge-redis/node_modules/redis
-ls ~/xa/extensions/wecom-oa-identity-adapter/node_modules/redis
-docker compose -f ~/xa-redis/docker-compose.yml ps
-docker network inspect xa-shared --format '{{.Name}}'
-```
-
-Redis 不是 `healthy` 或没有 `xa-shared` 时，先把独立 Redis 拉起来：
-
-```bash
-cd ~/xa-redis && docker compose up -d
-docker compose -f ~/xa-redis/docker-compose.yml ps
-```
+> **目标：** OA 插件加载、连上 MySQL 并建好表。
 
 属主收口：
 
@@ -1392,10 +1311,9 @@ sudo chown -R 1000:1000 ~/xa
 chmod 700 ~/xa/secrets
 chmod 600 ~/xa/secrets/*.txt
 chmod 755 ~/xa/entrypoint.sh
-sudo chown 1000:1000 ~/xa/entrypoint.sh ~/xa/secrets/*.txt
 ```
 
-启动（`cd ~/xa && docker compose down` **不会**停 Redis，这是预期）：
+启动：
 
 ```bash
 cd ~/xa
@@ -1405,14 +1323,15 @@ docker logs --tail 80 xa-gateway
 curl -sS http://127.0.0.1:18789/healthz
 ```
 
-日志**不要**出现：
+日志应有 `[oa-workflow-bridge] loaded (MySQL state)`，**不要**出现：
 
 ```text
-Redis error: getaddrinfo EAI_AGAIN xa-redis
-Cannot find package 'redis'
+MySQL init failed
+Cannot find package 'mysql2'
+Cannot find module 'jpeg-js'
 ```
 
-可以有插件已加载、`active=false` 的提示。然后：
+`MySQL init failed` 后面的原因按接入手册第 10 节对照（连不上 / 密码错 / 没建库 / 缺权限）。然后：
 
 ```bash
 docker exec -it \
@@ -1420,17 +1339,11 @@ docker exec -it \
   xa-gateway node dist/index.js plugins list
 ```
 
-应看到 `oa-workflow-bridge-redis` enabled。`load.paths` 已生效。
+应看到 `oa-workflow-bridge` enabled。在 MySQL 上 `SHOW TABLES FROM xa_oa;` 应有 `oa_identity` / `oa_inbox` / `oa_ticket`。再跑接入手册 8.2 只读预检。
 
-```bash
-docker network inspect xa-shared --format '{{range .Containers}}{{.Name}} {{end}}'
-```
+> **成功标准：** `docker compose ps` 为 `Up`；本机 `/healthz` 通；日志无 `MySQL init failed`；`plugins list` 含 OA 且 enabled；三张表已建。
 
-应同时列出 `xa-gateway` 与 `xa-redis`。
-
-> **成功标准：** `docker compose ps` 为 `Up`；本机 `/healthz` 通；日志无 `EAI_AGAIN xa-redis`、无 `Cannot find package 'redis'`；`plugins list` 含 OA 且 enabled。
-
-[← 18. 配置 Gateway 共享网络](#sec-18) · [↑ 目录](#toc) · [下一节 → 20. 安装企微公共插件](#sec-20)
+[← 18. 接入 OA 凭据](#sec-18) · [↑ 目录](#toc) · [下一节 → 20. 安装企微公共插件](#sec-20)
 
 ---
 
@@ -1475,7 +1388,7 @@ docker exec -it xa-gateway node dist/index.js <子命令>
 
 ```bash
 docker exec -it xa-gateway node dist/index.js config set \
-  plugins.allow '["oa-workflow-bridge-redis","wecom-openclaw-plugin"]'
+  plugins.allow '["oa-workflow-bridge","wecom-openclaw-plugin"]'
 
 docker exec -it xa-gateway node dist/index.js config set \
   plugins.entries.wecom-openclaw-plugin.enabled true
@@ -1657,7 +1570,7 @@ docker compose restart xa-gateway
 docker logs -f --timestamps xa-gateway
 ```
 
-只停 Gateway 时不要 `cd ~/xa-redis && docker compose down`。`restart: unless-stopped` 加上 `systemctl enable docker` 后，服务器重启一般会拉起容器；没起来再 `docker compose up -d`。
+OA 状态库在独立 MySQL 上，停 Gateway 不影响它。`restart: unless-stopped` 加上 `systemctl enable docker` 后，服务器重启一般会拉起容器；没起来再 `docker compose up -d`。
 
 资源看宿主机 `free`；时间看 `timedatectl`。服务器不要休眠。日志轮转已写入默认 compose。生产仍建议给 Gateway 加 `healthcheck`、按用量设内存限额，并把镜像从 `latest` 钉到具体版本或 digest。
 
@@ -1677,19 +1590,19 @@ docker logs -f --timestamps xa-gateway
 | [4](#sec-04) | 创建目录 + 工作区 | `MEMORY.md` 存在；`extensions/` 此时无插件也可以 |
 | [5](#sec-05) | 目录授权 | `ls -ln ~/xa` 为 `1000 1000` |
 | [6](#sec-06) | 全部凭据 | 8 个 secret；权限 `600` |
-| [7](#sec-07) | entrypoint | 第一份 8 行 export；权限 `755`；尚无 `OA_REDIS_URL` |
-| [8](#sec-08) | compose 第一份 | yml 在 `~/xa`；8 个 secret 已挂；无 Redis 网络 |
+| [7](#sec-07) | entrypoint | 第一份 8 行 export；权限 `755`；尚无 OA 凭据 |
+| [8](#sec-08) | compose 第一份 | yml 在 `~/xa`；8 个 secret 已挂；无 OA secret |
 | [9](#sec-09) | 最小 openclaw | 仅 gateway；无模型、无插件、无 `channels.wecom` |
 | [10](#sec-10) | docker pull | `docker images` 有将使用的 OpenClaw 镜像名 |
 | [11](#sec-11) | 第一次 up | 本机 `/healthz` 通；日志无 Restarting |
 | [12](#sec-12) | 写入模型 | json 含 `bailian` catalog；仍无 `plugins` / `channels` |
 | [13](#sec-13) | 第二次 up | `models status` 不再 unresolved |
-| [14](#sec-14) | 独立 Redis | `xa-redis` 为 `healthy`；`xa-shared` 存在 |
+| [14](#sec-14) | 独立 MySQL | `nc` 通 3306；`oa_mysql_password.txt` 已写 |
 | [15](#sec-15) | 拷贝 OA 插件 | 桥接 + 身份适配器目录存在；`active=false` |
-| [16](#sec-16) | 安装 OA 依赖 | 两个 `node_modules/redis` 都存在 |
+| [16](#sec-16) | 安装 OA 依赖 | `mysql2` / `jpeg-js` / `pngjs` 都存在 |
 | [17](#sec-17) | 启用 OA 插件 | json 仅 OA 进 `plugins`；本步不 `up` |
-| [18](#sec-18) | Gateway 入网 | entrypoint 含 `OA_REDIS_URL`；yml `external: true` |
-| [19](#sec-19) | 第三次 up | `/healthz` 通；日志无 `EAI_AGAIN xa-redis` |
+| [18](#sec-18) | OA 凭据 | 5 个 secret 已挂；entrypoint 含 `OA_MYSQL_PASSWORD` |
+| [19](#sec-19) | 第三次 up | `/healthz` 通；日志无 `MySQL init failed`；三张表已建 |
 | [20](#sec-20) | 安装企微公共插件 | `plugins list` 含 wecom 且 enabled |
 | [21](#sec-21) | 命令启用企微 + 终态 json | 测试机器人能收发；bindings 指向 `itservicedeskagent` |
 
@@ -1721,9 +1634,9 @@ docker logs -f --timestamps xa-gateway
 | `meta: Invalid input`、Restarting | 删掉非法 `meta` 键（`handoffTemplate` 等），换成当前阶段完整 json，`docker compose down && docker compose up -d` |
 | 第一次 up 后 `models status` unresolved | 预期。第 12–13 节写入模型后再查 |
 | `plugin path not found: .../wecom-openclaw-plugin` 且 `unknown channel id: wecom` | 插件未装就写了通道。先去掉 `channels.wecom` 和 wecom 的 `load.paths`，`down && up`，等 `plugins list` 有 wecom 后再写通道 |
-| `plugin path not found: .../oa-workflow-bridge` | json 仍写文件版目录。`allow` / `paths` / `entries` 只用 `oa-workflow-bridge-redis` |
-| `Redis error: getaddrinfo EAI_AGAIN xa-redis` | Gateway 解析不到主机名 `xa-redis`：Redis 没起，或不在网络 `xa-shared`。先 `cd ~/xa-redis && docker compose up -d`，确认 `healthy`。Gateway 的 yml 必须 `networks: xa-shared` 且 `external: true`，entrypoint 必须有 `OA_REDIS_URL=redis://:密码@xa-redis:6379/0`。然后 `cd ~/xa && docker compose down && docker compose up -d`。不要写 `127.0.0.1`，不要把 Redis 塞进 `~/xa/docker-compose.yml` |
-| `Cannot find package 'redis'` | 对 `oa-workflow-bridge-redis` 和 `wecom-oa-identity-adapter` 各跑一次 `docker run --user 1000:1000 ... npm install --omit=dev` |
+| `plugin path not found: .../oa-workflow-bridge-redis` | json 仍写旧目录。`allow` / `paths` / `entries` 只用 `oa-workflow-bridge` |
+| `MySQL init failed: …` | 按 OA 桥接接入手册第 10 节对照：`ECONNREFUSED` / `ETIMEDOUT` 查网络与 `bind-address`；`ER_ACCESS_DENIED_ERROR` 查密码与账号 host；`ER_BAD_DB_ERROR` 查库名；`OA_MYSQL_PASSWORD is not configured` 查第 18 节 |
+| `Cannot find package 'mysql2'` / `Cannot find module 'jpeg-js'` | 按第 16 节对 `oa-workflow-bridge` 跑一次 `docker run --user 1000:1000 ... npm install --omit=dev`，再 `down && up` |
 | Gateway Up 但企微 `autostart suppressed` | crash-loop breaker。不要 `channels start --channel`。需要时：`docker exec -it xa-gateway node dist/index.js gateway call channels.start --params '{"channel":"wecom","accountId":"default"}'` |
 | 容器 `Restarting` 时 `docker exec` 进不去 | `cd ~/xa && docker compose down`，按当前阶段完整 json 替换后再 `up`。不要把 `doctor --fix` 当第一次生产试验（可能改 `agents.entries`） |
 | 想用 `onboard` 代替改 json | 不要。会覆盖 xA 的 agent / workspace |

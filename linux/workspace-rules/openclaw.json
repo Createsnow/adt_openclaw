@@ -143,7 +143,7 @@
   },
   "plugins": {
     "allow": [
-      "oa-workflow-bridge-redis",
+      "oa-workflow-bridge",
       "wecom-openclaw-plugin"
     ],
     "deny": [
@@ -151,11 +151,11 @@
     ],
     "load": {
       "paths": [
-        "/home/node/.openclaw/extensions/oa-workflow-bridge-redis"
+        "/home/node/.openclaw/extensions/oa-workflow-bridge"
       ]
     },
     "entries": {
-      "oa-workflow-bridge-redis": {
+      "oa-workflow-bridge": {
         "enabled": true,
         "hooks": {
           "allowConversationAccess": true

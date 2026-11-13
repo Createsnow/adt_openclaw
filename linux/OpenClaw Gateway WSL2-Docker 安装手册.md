@@ -179,39 +179,27 @@ mkdir -p ~/xa/{config,workspace,extensions,secrets}
 
 REPO=/mnt/f/workspace/ADK-OFFICE/openclaw/linux
 
-cp -r "$REPO/openclaw/workspace-rules/." ~/xa/workspace/
-cp "$REPO/openclaw/MAPPING_RULES.md" "$REPO/openclaw/ROUTING_RULES.md" \
-   "$REPO/openclaw/REGION_MAPPING.md" "$REPO/openclaw/TICKET_SCHEMA.md" \
-   "$REPO/openclaw/TICKET_STATUS_BANNER.md" "$REPO/openclaw/OA_WORKFLOW_CONTRACT.md" \
-   ~/xa/workspace/
-# OA 桥接只用 Redis 版（不要拷 oa-workflow-bridge 文件版）
-cp -r "$REPO/OA_tool/oa-workflow-bridge-redis" ~/xa/extensions/
-cp -r "$REPO/OA_tool/wecom-oa-identity-adapter" ~/xa/extensions/
-# Docker 路径：用官方镜像装依赖，宿主不必有 npm。完整约定（含 Hub 名 / GHCR 名两条命令）见 OA Redis 接入手册 4.2。
+cp -r "$REPO/workspace-rules/workspace/." ~/xa/workspace/
+# OA 桥接（身份转换已在插件内；状态存独立 MySQL）
+cp -r "$REPO/OA_tool/oa-workflow-bridge" ~/xa/extensions/
+rm -rf ~/xa/extensions/oa-workflow-bridge/node_modules
+# Docker 路径：用官方镜像装依赖，宿主不必有 npm。约定见 OA 桥接接入手册 4.2。
 # 下面镜像名须与本机 docker images、以及随后 compose 的 image: 一致。
-# 若 docker images 没有 openclaw/openclaw、只有 ghcr.io/openclaw/openclaw：
-# 不要跑下面 Hub 名，改用 OA 手册 4.2「GHCR 名」整段，或按第 7 节方案 A 先 tag。
+# 若 docker images 没有 openclaw/openclaw、只有 ghcr.io/openclaw/openclaw：把最后一行镜像换成那一串，或按第 7 节方案 A 先 tag。
 sudo chown -R 1000:1000 ~/xa/extensions
 docker run --rm --user 1000:1000 \
   -e HOME=/tmp \
   -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/xa/extensions/oa-workflow-bridge-redis:/app" \
+  -v "$HOME/xa/extensions/oa-workflow-bridge:/app" \
   -w /app \
   openclaw/openclaw:latest \
   npm install --omit=dev
-docker run --rm --user 1000:1000 \
-  -e HOME=/tmp \
-  -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/xa/extensions/wecom-oa-identity-adapter:/app" \
-  -w /app \
-  openclaw/openclaw:latest \
-  npm install --omit=dev
-cp "$REPO/openclaw/openclaw.json" ~/xa/config/openclaw.json
+cp "$REPO/workspace-rules/openclaw.json" ~/xa/config/openclaw.json
 ```
 
-OA 插件依赖独立 Redis，按 **`Redis 独立实例部署手册.md`** 部署；Gateway 只通过 `OA_REDIS_URL` 连接。第 4 节 `docker run` 的镜像名必须与本机已有镜像一致。
+OA 插件的状态存在独立 MySQL，按 **`MySQL 数据库准备.md`** 准备库和账号，并在 `~/xa/extensions/oa-workflow-bridge/bridge-config.json` 的 `mysql` 段填主机 / 账号 / 库名（密码走 secret `oa_mysql_password.txt`）。第 4 节 `docker run` 的镜像名必须与本机已有镜像一致。
 
-若 `docker images` **没有** `openclaw/openclaw`（`compose ps` 的 IMAGE 已是 `ghcr.io/openclaw/openclaw:latest`），不要跑上面默认的 Hub 名，也不要为此再拉 Docker Hub。完整「GHCR 名」命令见 **`OA_tool/OA Workflow Bridge（Redis）接入手册.md` 第 4.2 节**；或按第 7 节方案 A 先 `docker tag` 再跑上面默认块。
+若 `docker images` **没有** `openclaw/openclaw`（`compose ps` 的 IMAGE 已是 `ghcr.io/openclaw/openclaw:latest`），不要跑上面默认的 Hub 名，也不要为此再拉 Docker Hub。把上面命令最后一行镜像换成 `ghcr.io/openclaw/openclaw:latest` 即可（见 **`OA_tool/OA Workflow Bridge 接入手册.md` 第 4.2 节**）；或按第 7 节方案 A 先 `docker tag` 再跑上面默认块。
 
 企微插件 `wecom-openclaw-plugin` **不在本仓库**（来自 npm catalog）。本机若已有，拷到：
 
@@ -260,7 +248,7 @@ sudo chown 1000:1000 ~/xa/workspace/MEMORY.md
 | `C:\\OpenClaw\\workspace-ITServiceDeskAgent` | `/home/node/.openclaw/workspace` |
 | `C:\\OpenClaw\\profiles\\xa-it-service\\agents\\itservicedeskagent\\agent` | `/home/node/.openclaw/agents/itservicedeskagent/agent` |
 | `C:\\OpenClaw\\profiles\\xa-it-service\\extensions\\wecom-openclaw-plugin` | `/home/node/.openclaw/extensions/wecom-openclaw-plugin` |
-| `C:\\OpenClaw\\profiles\\xa-it-service\\extensions\\oa-workflow-bridge-redis` | `/home/node/.openclaw/extensions/oa-workflow-bridge-redis` |
+| `C:\\OpenClaw\\profiles\\xa-it-service\\extensions\\oa-workflow-bridge` | `/home/node/.openclaw/extensions/oa-workflow-bridge` |
 
 ### 5.2 删除 DPAPI / PowerShell 密钥提供方
 
@@ -326,15 +314,15 @@ sudo chown -R 1000:1000 ~/xa/extensions
 ```json
 "plugins": {
   "allow": [
-    "oa-workflow-bridge-redis"
+    "oa-workflow-bridge"
   ],
   "load": {
     "paths": [
-      "/home/node/.openclaw/extensions/oa-workflow-bridge-redis"
+      "/home/node/.openclaw/extensions/oa-workflow-bridge"
     ]
   },
   "entries": {
-    "oa-workflow-bridge-redis": {
+    "oa-workflow-bridge": {
       "enabled": true,
       "hooks": { "allowConversationAccess": true }
     }
@@ -574,7 +562,7 @@ sudo chown 1000:1000 ~/xa/secrets/model_*.txt
 
 #### 6.4.2 升级 entrypoint.sh（整文件替换）
 
-本节**不含** OA / Redis / 身份转换 export。若已经按 OA Redis 手册接了桥接，**不要**用下面这段覆盖 `~/xa/entrypoint.sh`（会丢掉 `OA_REDIS_URL` 与 `WECOM_IDENTITY_*`）。已接 OA 时只用 `OA_tool/OA Workflow Bridge（Redis）接入手册.md` 第 5.5.2.2 节。
+本节**不含** OA / MySQL / 身份转换 export。若已经接了桥接，**不要**用下面这段覆盖 `~/xa/entrypoint.sh`（会丢掉 `OA_MYSQL_PASSWORD`、`OA_*` 与 `WECOM_IDENTITY_*`）。已接 OA 时直接用仓库 `docker/entrypoint.sh`（见 `OA_tool/OA Workflow Bridge 接入手册.md` 第 5.3 节）。
 
 ```bash
 cat > ~/xa/entrypoint.sh <<'EOF'
@@ -762,10 +750,10 @@ cat ~/xa/secrets/gateway_token.txt
 OA 只读预检（当前阶段可选，且 **不会** 建单）：
 
 ```bash
-docker exec -it xa-gateway node /home/node/.openclaw/extensions/oa-workflow-bridge-redis/scripts/readonly-preflight.mjs
+docker exec -it xa-gateway sh -c 'export OA_MYSQL_PASSWORD="$(tr -d "\n" < /run/secrets/oa_mysql_password)" OA_API_USER_ID="$(tr -d "\n" < /run/secrets/oa_api_user_id)" OA_APP_SECRET="$(tr -d "\n" < /run/secrets/oa_app_secret)"; node /home/node/.openclaw/extensions/oa-workflow-bridge/scripts/readonly-preflight.mjs'
 ```
 
-未配置 OA 凭据时失败是预期行为。正式恢复 OA 前读 `OA_tool/OA Workflow Bridge（Redis）接入手册.md`。
+未配置 OA 凭据时失败是预期行为。正式恢复 OA 前读 `OA_tool/OA Workflow Bridge 接入手册.md`。
 
 ---
 
@@ -847,7 +835,7 @@ docker logs -f --timestamps xa-gateway
 | 1 | WSL2 Ubuntu | `wsl -l -v` 为 2 |
 | 2 | Docker Engine + Compose | `docker compose version` 有输出 |
 | 3 | systemd + 加速 | `hello-world` 成功 |
-| 4 | `~/xa` 拷规则/插件/配置 | config / workspace / extensions 有文件；桥接**与**身份适配器的 `extensions/*/node_modules/redis` 都存在（OA Redis 手册 4.2） |
+| 4 | `~/xa` 拷规则/插件/配置 | config / workspace / extensions 有文件；桥接的 `extensions/oa-workflow-bridge/node_modules/{mysql2,jpeg-js,pngjs}` 都存在（OA 桥接接入手册 4.2） |
 | 5 | 改 `openclaw.json` | 无 `handoffTemplate`；无 `C:\`、无 powershell/DPAPI；路径为 `/home/node/...` |
 | 6 | secrets + entrypoint + compose（阶段 A） | 无 `.env`；3 个 secret；entrypoint 3 行 export |
 | 7 | `compose up` | `/healthz` 通，Dashboard 能打开 |
@@ -864,7 +852,7 @@ docker logs -f --timestamps xa-gateway
 | 加速源「免费节点繁忙」 | 第 7 节方案 A（GHCR 后 **必须 tag**）或方案 B（关加速 + dockerd 代理） |
 | 拉 `ghcr.io` 超时 | Windows VPN 未作用于 dockerd，用方案 B |
 | 第 4 节 / OA 手册 `npm install` 又在拉 `openclaw/openclaw:latest` | 本机镜像名是 `ghcr.io/openclaw/openclaw:latest`（方案 A 未 tag，或 yml 已改成 ghcr）。`docker images` 没有 `openclaw/openclaw` 时不要去 Docker Hub 补拉。用 OA Redis 接入手册 4.2 的「GHCR 名」整段，或先 `docker tag` |
-| `docker images` 没有 `openclaw/openclaw` / `compose ps` IMAGE 是 ghcr | 不是缺镜像。Gateway 已在用 GHCR 名。装依赖见 OA Redis 接入手册 4.2 |
+| `docker images` 没有 `openclaw/openclaw` / `compose ps` IMAGE 是 ghcr | 不是缺镜像。Gateway 已在用 GHCR 名。装依赖见 OA 桥接接入手册 4.2 |
 | `gateway.bind` 校验失败、容器重启 | `--bind` / json 里只能用 `lan`、`loopback`、`auto`、`tailnet`，不要写 IP |
 | Permission denied 读写挂载目录 | `sudo chown -R 1000:1000 ~/xa` |
 | 读 `/run/secrets` Permission denied | secret 文件权限过严，或 `user: "1000:1000"` 读不到 root 的 400 文件 |
@@ -875,25 +863,25 @@ docker logs -f --timestamps xa-gateway
 | `*_FILE` 环境变量不生效 | OpenClaw 不认该约定，必须用 `entrypoint.sh` export |
 | `meta: Invalid input`、容器 Restarting | 删掉非法 `meta` 键（`handoffTemplate` 等，见 5.0），然后 `docker compose down && docker compose up -d` |
 | `plugin path not found: .../wecom-openclaw-plugin` 且 `unknown channel id: wecom` | 本仓库不含该插件。没有则按 5.5 去掉 wecom；有插件或网关 Up 后按 `WeCom 通道插件接入手册.md` 安装 |
-| `plugin path not found: .../oa-workflow-bridge`、Restarting (78) | json 仍写文件版目录。allow / paths / entries 改为 `oa-workflow-bridge-redis`（OA Redis 手册 5.1），再 `down && up` |
+| `plugin path not found: .../oa-workflow-bridge-redis`、Restarting (78) | json 仍写旧目录。allow / paths / entries 改为 `oa-workflow-bridge`（OA 桥接接入手册 5.1），再 `down && up` |
 | Gateway Up 但企微 `autostart suppressed` | crash-loop breaker。见运维手册 **11.4**；不要 `channels start --channel` |
 | 容器 `Restarting` 时 `docker exec` 进不去 | 先 `compose down`，按 5.0/5.5 改 json，或 `docker run ... node dist/index.js doctor --fix` 修挂载配置 |
 | 想用 `onboard` 代替改 json | 不要。会覆盖 xA 的 agent/workspace。见 8.4 |
 | 模型仍不智能 / 占位符 | 检查清单第 9 步：是否完成 **6.4**；`models status` 是否 unresolved |
 | 改了 baseUrl 不生效 | 改 `model_base_url.txt` 后须 `compose down/up`；勿用 CLI 写明文 |
 | `channels add wecom` 没有 wecom | 见 `WeCom 通道插件接入手册.md` 第 5–6 节（allowlist + 安装插件） |
-| `Command 'npm' not found` | **不要** `sudo apt install npm`。第 4 节用官方镜像安装；约定见 `OA_tool/OA Workflow Bridge（Redis）接入手册.md` 第 4.2 节 |
+| `Command 'npm' not found` | **不要** `sudo apt install npm`。第 4 节用官方镜像安装；约定见 `OA_tool/OA Workflow Bridge 接入手册.md` 第 4.2 节 |
 
 ---
 
 ## 12. 和本仓库其他资料的关系
 
 - 本仓库只维护 Linux / Docker 路径。不要在容器里执行 Windows 原生 PowerShell / DPAPI 脚本。
-- 业务规则看 `openclaw/workspace-rules/` 与 `openclaw/xA 提示词规则优化说明.md`；OA 契约看 `OA_tool/OA Workflow Bridge（Redis）接入手册.md`；凭据边界看 `第三方凭据注入与配置中心演进.md`。
+- 业务规则看 `workspace-rules/workspace/AGENTS.md` 与 `workspace-rules/xA 提示词规则优化说明.md`；OA 契约看 `OA_tool/OA Workflow Bridge 接入手册.md`；凭据边界看 `第三方凭据注入与配置中心演进.md`。
 - 企业 Vault / **Nacos 配置中心** 可替换 Docker secret 文件来源：保持 **6.0 变量名契约** 与 `${VAR}` 占位符，只换 entrypoint 或同步脚本的取数方式。见 **[第三方凭据注入与配置中心演进.md](第三方凭据注入与配置中心演进.md)**。
 - 装完之后的启停、巡检、备份、升级、排障见 **[OpenClaw Gateway Docker 运维手册.md](OpenClaw Gateway Docker 运维手册.md)**。第 10 节是**安装**检查清单，不是日常巡检。
 - 迁到内网 Linux 服务器或 VM 时，不要继续用本文第 1 节 WSL 步骤，改走 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md)**。同一企微 Bot 不要在 WSL 与服务器上同时 `up`。
-- Redis 与 OA 桥接见 **[Redis 独立实例部署手册.md](Redis 独立实例部署手册.md)** 与 **[OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA Workflow Bridge（Redis）接入手册.md)**。
+- MySQL 与 OA 桥接见 **[MySQL 数据库准备.md](MySQL%20数据库准备.md)** 与 **[OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md)**。
 
 ---
 

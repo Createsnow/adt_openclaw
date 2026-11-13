@@ -1,0 +1,20 @@
+{
+  "name": "@adtek/oa-workflow-bridge",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "xA IT service desk OA bridge with MySQL-backed tickets, inbox and identity cache",
+  "openclaw": {
+    "extensions": [
+      "./index.mjs"
+    ]
+  },
+  "scripts": {
+    "test": "node --test --disable-warning=ExperimentalWarning tests/*.test.mjs"
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "mysql2": "^3.11.0",
+    "pngjs": "^7.0.0"
+  }
+}
