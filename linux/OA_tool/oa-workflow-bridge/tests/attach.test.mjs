@@ -4,14 +4,9 @@ import { access, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { clearInboundMedia, dropCancelRestoredInbound, mediaScope, peekInboundMedia, rememberInboundMedia } from "../src/inbound-media.mjs";
-import { discardUnpreparedInbox, getActiveTicket, getInbox, getTicket, inboxDirName, stagingPaths, withStateLock } from "../src/store.mjs";
-import { createTestStore, expireNow } from "./helpers.mjs";
+import { discardUnpreparedInbox, getActiveTicket, getTicket, inboxDirName, readInbox, stagingPaths, withStateLock } from "../src/store.mjs";
+import { createTestStore, expireNow, hookCapture } from "./helpers.mjs";
 import { createOAWorkflowToolFactory } from "../src/tool.mjs";
-
-test.beforeEach(() => {
-  clearInboundMedia();
-});
 
 function parse(result) {
   return JSON.parse(result.content[0].text);
@@ -55,6 +50,7 @@ function dependencies({ createRequest } = {}) {
       options: new Map([["电脑/打印机/网络问题（智园）", 11]]),
       typeSystems: new Map([["运维支持", new Set(["电脑/打印机/网络问题（智园）"])]]),
       handlers: new Map([["电脑/打印机/网络问题（智园）", "10251"]]),
+      names: new Map([["电脑/打印机/网络问题（智园）", "郑鹏程"]]),
     }),
     clientFactory: () => ({ createRequest: createRequest || (async () => ({ requestId: "1500001" })) }),
     lookupRequesterProfile: async () => ({ departmentId: "714", jobTitleId: "636", locationId: "3" }),
@@ -67,7 +63,6 @@ function dependencies({ createRequest } = {}) {
 async function scratch(t, label) {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), `xa-oa-${label}-`));
   t.after(() => {
-    clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
   });
   const inbound = path.join(stateDir, "media", "inbound");
@@ -144,12 +139,13 @@ test("建单前 attach 把 openclaw-staged/input- 副本收成 1 份", async (t)
   await writeFile(configPath, "image-bytes");
   await writeFile(stagedPath, "image-bytes");
 
+  const stateStore = createTestStore();
   const factory = createOAWorkflowToolFactory({
     stateDir,
-    stateStore: createTestStore(),
+    stateStore,
     dependencies: dependencies(),
   });
-  rememberInboundMedia(mediaScope(context()), [
+  await hookCapture(stateStore, stateDir, context(), [
     { localPath: configPath, fileName: "企业微信截图_17896400538494.png" },
     { localPath: stagedPath, fileName: `input-${originalName}` },
   ]);
@@ -170,13 +166,14 @@ test("待确认期间同一张图的 inbound 与 workspace 副本只暂存一份
   await writeFile(configPath, "image-bytes");
   await writeFile(workspacePath, "image-bytes");
 
+  const stateStore = createTestStore();
   const factory = createOAWorkflowToolFactory({
     stateDir,
-    stateStore: createTestStore(),
+    stateStore,
     dependencies: dependencies(),
   });
   const prepared = parse(await factory(context()).execute("call-1", { action: "prepare", draft: draft() }));
-  rememberInboundMedia(mediaScope(context()), [
+  await hookCapture(stateStore, stateDir, context(), [
     { localPath: configPath, fileName: "企业微信截图_1.png" },
     { localPath: workspacePath, fileName: "企业微信截图_1.png" },
   ]);
@@ -231,11 +228,10 @@ test("prepare 之前 attach 落到会话 inbox，prepare 认领且不重复暂�
   assert.equal(prepared.summary.attachmentCount, 1);
   assert.equal(prepared.summary.imageCount, 1);
 
-  // 认领之后 inbox 目录与库里记录都不该再留下。
+  // 认领之后附件在工单目录，inbox 里不再留附件（只留去重键）。
   const { stagingRoot } = stagingPaths(stateDir);
-  await access(path.join(stagingRoot, prepared.confirmationId));
-  await assert.rejects(() => access(path.join(stagingRoot, inboxDirName(pendingOwner.identity, pendingOwner.session))));
-  assert.equal(await getInbox(stateStore, pendingOwner.identity, pendingOwner.session), null);
+  assert.deepEqual(await readdir(path.join(stagingRoot, prepared.confirmationId)), ["01-报错截图.png"]);
+  assert.deepEqual((await readInbox(stateStore, pendingOwner.identity)).items, []);
 });
 
 test("同会话已有 pending 时 attach 不带 confirmationId 并入该单", async (t) => {
@@ -262,7 +258,8 @@ test("同会话已有 pending 时 attach 不带 confirmationId 并入该单", as
 
   const pending = await getTicket(stateStore, prepared.confirmationId);
   assert.equal(pending.staged.length, 1);
-  assert.equal(await getInbox(stateStore, pendingOwner.identity, pendingOwner.session), null);
+  assert.deepEqual((await readInbox(stateStore, pendingOwner.identity)).items, []);
+  assert.match(attached.replyZh, /^📎 已收到 1份图片\n\n📋 \*\*当前工单\*\*/);
 });
 
 test("同一轮里 ctx 与 inbox 指向同一文件时只暂存一次", async (t) => {
@@ -281,15 +278,12 @@ test("同一轮里 ctx 与 inbox 指向同一文件时只暂存一次", async (t
   assert.equal(prepared.summary.attachmentCount, 1);
 });
 
-test("cancel 之后改稿重新 prepare，已暂存的附件不会丢", async (t) => {
-  const { stateDir, inbound } = await scratch(t, "attach-recancel");
+test("改稿直接再 prepare：替换旧单，同一对话里旧单附件带到新单", async (t) => {
+  const { stateDir, inbound } = await scratch(t, "attach-rewrite");
   const shot = path.join(inbound, "first.png");
   await writeFile(shot, "image-bytes");
-  const factory = createOAWorkflowToolFactory({
-    stateDir,
-    stateStore: createTestStore(),
-    dependencies: dependencies(),
-  });
+  const stateStore = createTestStore();
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore, dependencies: dependencies() });
 
   const first = parse(await factory(context("wecom-user-1", "room-1", { mediaPaths: [shot] })).execute("call-1", {
     action: "prepare",
@@ -297,21 +291,19 @@ test("cancel 之后改稿重新 prepare，已暂存的附件不会丢", async (t
   }));
   assert.equal(first.summary.attachmentCount, 1);
 
-  const cancelled = parse(await factory(context()).execute("call-2", {
-    action: "cancel",
-    confirmationId: first.confirmationId,
-  }));
-  assert.equal(cancelled.code, "CANCELLED");
-  assert.equal(cancelled.attachmentCount, 1);
-
-  // 改稿后的新单必须还带着那张图：cancel 已经把 staging 副本删了，靠回灌的源路径重新暂存。
-  const second = parse(await factory(context()).execute("call-3", {
+  const second = parse(await factory(context()).execute("call-2", {
     action: "prepare",
     draft: { ...draft("IT-20260908-121500-BBBB"), problemDescription: "电脑死机，重启无效。" },
   }));
   assert.equal(second.code, "AWAITING_CONFIRMATION");
+  assert.equal(second.replacedPrevious, true);
   assert.equal(second.summary.attachmentCount, 1);
-  assert.equal(second.summary.imageCount, 1);
+  assert.equal(second.summary.problemSummary, "电脑死机，重启无效");
+  assert.match(second.replyZh, /^📝 已补充描述\n\n📋 \*\*当前工单\*\*/);
+  assert.equal((await getTicket(stateStore, first.confirmationId)).status, "cancelled");
+  const { stagingRoot } = stagingPaths(stateDir);
+  assert.deepEqual(await readdir(path.join(stagingRoot, second.confirmationId)), ["01-first.png"]);
+  await assert.rejects(() => access(path.join(stagingRoot, first.confirmationId)));
 });
 
 test("明确取消后的下一轮 prepare 不再带旧单附件", async (t) => {
@@ -337,9 +329,6 @@ test("明确取消后的下一轮 prepare 不再带旧单附件", async (t) => {
   assert.equal(cancelled.code, "CANCELLED");
   assert.equal(cancelled.attachmentCount, 1);
 
-  // 模拟员工下一句「帮我提交」：message_received 先丢掉 cancel 回灌的旧图。
-  assert.equal(dropCancelRestoredInbound(mediaScope(context())), 1);
-
   const second = parse(await factory(context()).execute("call-3", {
     action: "prepare",
     draft: draft("IT-20260908-121500-BBBB"),
@@ -349,107 +338,73 @@ test("明确取消后的下一轮 prepare 不再带旧单附件", async (t) => {
   assert.equal(second.summary.imageCount, 0);
 });
 
-test("同一人同一会话已有待确认单时，另开一张单被 ALREADY_PENDING 挡住", async (t) => {
-  const { stateDir } = await scratch(t, "attach-single");
-  const factory = createOAWorkflowToolFactory({
-    stateDir,
-    stateStore: createTestStore(),
-    dependencies: dependencies(),
-  });
-  const first = parse(await factory(context()).execute("call-1", {
+test("同一人另一个对话里报新问题：作废上一张、按新问题建单，旧单附件不带过来", async (t) => {
+  const { stateDir, inbound } = await scratch(t, "attach-replace-other");
+  const shot = path.join(inbound, "old.png");
+  await writeFile(shot, "image-bytes");
+  const stateStore = createTestStore();
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore, dependencies: dependencies() });
+  const first = parse(await factory(context("wecom-user-1", "room-a", { mediaPaths: [shot] })).execute("call-1", {
     action: "prepare",
     draft: draft("IT-20260908-121500-CCCC"),
   }));
-  const second = parse(await factory(context()).execute("call-2", {
+  assert.equal(first.summary.attachmentCount, 1);
+  const second = parse(await factory(context("wecom-user-1", "room-b")).execute("call-2", {
     action: "prepare",
-    draft: draft("IT-20260908-121600-DDDD"),
+    draft: { ...draft("IT-20260908-121600-DDDD"), problemDescription: "电脑蓝屏。" },
   }));
-  assert.equal(second.ok, false);
-  assert.equal(second.code, "ALREADY_PENDING");
-  assert.equal(second.confirmationId, first.confirmationId);
-  assert.equal(second.externalTicketId, first.summary.externalTicketId);
-  assert.equal(second.summary, "电脑死机");
-  assert.equal(second.location, "智园");
-  assert.equal(first.location, "智园");
-  assert.equal(first.summary.location, "智园");
+  assert.equal(second.code, "AWAITING_CONFIRMATION");
+  assert.equal(second.summary.attachmentCount, 0);
+  assert.match(second.replyZh, /^🗑️ \*\*上一张已取消\*\*（电脑死机）\n\n---\n\n📋 \*\*当前工单\*\*\n\n💬 问题：电脑蓝屏/);
+  assert.equal((await getTicket(stateStore, first.confirmationId)).status, "cancelled");
 
   // 群聊里另一位同事在同一会话建单不受影响。
-  const other = parse(await factory(context("wecom-user-2", "room-1")).execute("call-3", {
+  const other = parse(await factory(context("wecom-user-2", "room-b")).execute("call-3", {
     action: "prepare",
     draft: draft("IT-20260908-121700-EEEE"),
   }));
   assert.equal(other.code, "AWAITING_CONFIRMATION");
-
-  // 取消之后同一人可以重新建单。
-  parse(await factory(context()).execute("call-4", { action: "cancel", confirmationId: first.confirmationId }));
-  const third = parse(await factory(context()).execute("call-5", {
-    action: "prepare",
-    draft: draft("IT-20260908-121800-FFFF"),
-  }));
-  assert.equal(third.code, "AWAITING_CONFIRMATION");
+  assert.equal((await getTicket(stateStore, second.confirmationId)).status, "awaiting_confirmation");
 });
 
-test("同一条企微消息重复 prepare 时，ALREADY_PENDING 回执仍带 confirmationId", async (t) => {
+test("同一条企微消息重复 prepare：静默替换，不提示已补充、不留两张", async (t) => {
   const { stateDir } = await scratch(t, "attach-same-message");
-  const factory = createOAWorkflowToolFactory({
-    stateDir,
-    stateStore: createTestStore(),
-    dependencies: dependencies(),
-  });
-  // messageId + WeComReceivedAt 固定，两轮算出同一个内部幂等号，走 ledger 幂等拦截而不是 person-pending。
+  const stateStore = createTestStore();
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore, dependencies: dependencies() });
   const ctx = context("wecom-user-1", "room-1", {
     messageId: "af41832830918c2415b6fdbe47eaafd9",
     WeComReceivedAt: "2026-09-08 16:19:19",
   });
   const first = parse(await factory(ctx).execute("call-1", { action: "prepare", draft: draft() }));
-  assert.equal(first.code, "AWAITING_CONFIRMATION");
-
   const retry = parse(await factory(ctx).execute("call-2", { action: "prepare", draft: draft() }));
-  assert.equal(retry.ok, false);
-  assert.equal(retry.code, "ALREADY_PENDING");
-  // 没有这些字段模型既出不了确认卡也出不了拦截卡。
-  assert.equal(retry.confirmationId, first.confirmationId);
-  assert.equal(retry.externalTicketId, first.summary.externalTicketId);
-  assert.equal(retry.sameSession, true);
-  assert.equal(retry.summary, "电脑死机");
-  assert.equal(retry.location, "智园");
-  assert.equal(retry.retentionHours, 24);
-  assert.equal(typeof retry.expiresAt, "string");
+  assert.equal(retry.code, "AWAITING_CONFIRMATION");
+  assert.equal(retry.replacedPrevious, false);
+  assert.match(retry.replyZh, /^📋 \*\*当前工单\*\*/);
+  assert.equal((await getActiveTicket(stateStore, ownerOf().identity)).confirmationId, retry.confirmationId);
+  assert.equal((await getTicket(stateStore, first.confirmationId)).status, "cancelled");
 });
 
-test("并发 prepare 抢锁失败的一方，ALREADY_PENDING 回执同样带 confirmationId", async (t) => {
+test("并发 prepare：按顺序替换，最后只剩一张待确认、附件只在它名下", async (t) => {
   const { stateDir, inbound } = await scratch(t, "attach-race");
   const shot = path.join(inbound, "race.png");
   await writeFile(shot, "image-bytes");
-  const factory = createOAWorkflowToolFactory({
-    stateDir,
-    stateStore: createTestStore(),
-    dependencies: dependencies(),
-  });
-  // 两个不同 messageId，绕开 ledger 幂等，冲突只能在锁内被发现。带附件才会建 staging 目录。
+  const stateStore = createTestStore();
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore, dependencies: dependencies() });
   const ctxOf = (messageId) => context("wecom-user-1", "room-1", {
     messageId,
     WeComReceivedAt: "2026-09-08 16:20:00",
     mediaPaths: [shot],
   });
-  const [a, b] = (await Promise.all([
+  const results = (await Promise.all([
     factory(ctxOf("1111111111111111111111111111aaaa")).execute("call-1", { action: "prepare", draft: draft() }),
     factory(ctxOf("2222222222222222222222222222bbbb")).execute("call-2", { action: "prepare", draft: draft() }),
   ])).map(parse);
-
-  const winner = a.code === "AWAITING_CONFIRMATION" ? a : b;
-  const loser = winner === a ? b : a;
-  assert.equal(winner.code, "AWAITING_CONFIRMATION");
-  assert.equal(loser.ok, false);
-  assert.equal(loser.code, "ALREADY_PENDING");
-  assert.equal(loser.confirmationId, winner.confirmationId);
-  assert.equal(loser.sameSession, true);
-  assert.equal(loser.retentionHours, 24);
-
-  // 抢锁失败的一方在锁内才发现冲突，此时它已经建好自己的 staging 目录，必须被回收。
+  assert.deepEqual(results.map((item) => item.code), ["AWAITING_CONFIRMATION", "AWAITING_CONFIRMATION"]);
+  const active = await getActiveTicket(stateStore, ownerOf().identity);
+  assert.equal(active.staged.length, 1);
   const { stagingRoot } = stagingPaths(stateDir);
-  const leftovers = await readdir(stagingRoot).catch(() => []);
-  assert.deepEqual(leftovers.filter((name) => name.startsWith("OA-")), [winner.confirmationId]);
+  const leftovers = (await readdir(stagingRoot)).filter((name) => name.startsWith("OA-"));
+  assert.deepEqual(leftovers, [active.confirmationId]);
 });
 
 test("attach 只认原提交人，别人的 confirmationId 拿不到附件通道", async (t) => {
@@ -517,11 +472,12 @@ test("inbox 默认 30 分钟过期，不会跟着 pending 活 24 小时", async 
 
   const started = Date.now();
   stateStore.now = () => started + 29 * 60 * 1000;
-  assert.ok(await getInbox(stateStore, ownerOf().identity, ownerOf().session));
+  assert.equal((await readInbox(stateStore, ownerOf().identity)).expired, false);
 
   stateStore.now = () => started + 30 * 60 * 1000 + 1000;
   const prepared = parse(await factory(context()).execute("call-2", { action: "prepare", draft: draft() }));
   assert.equal(prepared.summary.attachmentCount, 0);
+  assert.match(prepared.replyZh, /^⏳ 刚才的图片或文件已过期，请重新发送。\n\n📋/);
 });
 
 test("只 attach 未 prepare 时换 sessionId，新会话 prepare 不得认领旧附件", async (t) => {
@@ -546,7 +502,7 @@ test("只 attach 未 prepare 时换 sessionId，新会话 prepare 不得认领�
   })).execute("call-2", { action: "prepare", draft: draft("IT-20260911-110000-NEW1") }));
   assert.equal(prepared.code, "AWAITING_CONFIRMATION");
   assert.equal(prepared.summary.attachmentCount, 0);
-  assert.equal(await getInbox(stateStore, ownerOf("wecom-user-1", "session-aaa").identity, ownerOf("wecom-user-1", "session-aaa").session), null);
+  assert.equal((await readInbox(stateStore, ownerOf().identity))?.items?.length || 0, 0);
 });
 
 test("/new 清掉尚未 prepare 的 inbox，同一 sessionKey 再 prepare 也带不上旧文件", async (t) => {
@@ -561,7 +517,7 @@ test("/new 清掉尚未 prepare 的 inbox，同一 sessionKey 再 prepare 也带
   assert.equal(buffered.code, "BUFFERED");
 
   const wiped = await discardUnpreparedInbox({ store: stateStore, stateDir, source: ctx });
-  assert.ok(wiped.wiped.length >= 1);
+  assert.equal(wiped.wiped, true);
 
   const prepared = parse(await factory(context("wecom-user-1", sessionKey)).execute("call-2", {
     action: "prepare",
@@ -585,8 +541,7 @@ test("discardUnpreparedInbox 必须等 inbox 写入锁结束，不能并行清�
       store: stateStore,
       stateDir,
       source: context("wecom-user-1", "room-1"),
-      logger: { info() { order.push("wipe-ran"); } },
-    }),
+    }).then(() => order.push("wipe-ran")),
   ]);
   assert.deepEqual(order, ["writer-start", "writer-end", "wipe-ran"]);
 });
@@ -609,14 +564,14 @@ test("discardUnpreparedInbox 不删已经 prepare 的待确认单", async (t) =>
   assert.equal(status.pending.imageCount, 1);
 });
 
-test("getInbox 只按提交人 + 会话点查，不串到别人", async (t) => {
+test("inbox 只按提交人点查，不串到别人", async (t) => {
   const { stateDir, inbound } = await scratch(t, "attach-scope");
   const shot = path.join(inbound, "scope.png");
   await writeFile(shot, "image-bytes");
   const stateStore = createTestStore();
   const factory = createOAWorkflowToolFactory({ stateDir, stateStore, dependencies: dependencies() });
   await factory(context("wecom-user-1", "room-1", { mediaPaths: [shot] })).execute("call-1", { action: "attach" });
-  assert.equal(await getInbox(stateStore, "0".repeat(24), "0".repeat(24)), null);
+  assert.equal(await readInbox(stateStore, "0".repeat(24)), null);
   const prepared = parse(await factory(context("wecom-user-2", "room-1")).execute("call-2", {
     action: "prepare",
     draft: draft("IT-20260908-122000-GGGG"),
@@ -624,51 +579,36 @@ test("getInbox 只按提交人 + 会话点查，不串到别人", async (t) => {
   assert.equal(prepared.summary.attachmentCount, 0);
 });
 
-test("同一人换 OpenClaw sessionId 后旧图不串，但能查待确认状态", async (t) => {
+test("同一人 /new 后旧图不串；查进度看到上一张，可在新对话里取消", async (t) => {
   const { stateDir, inbound } = await scratch(t, "session-isolate");
   const shot = path.join(inbound, "old-session.png");
   await writeFile(shot, "image-bytes");
   const stateStore = createTestStore();
   const factory = createOAWorkflowToolFactory({ stateDir, stateStore, dependencies: dependencies() });
-  const firstCtx = context("wecom-user-1", "wecom:direct:peer", {
-    sessionId: "session-aaa",
-    mediaPaths: [shot],
-  });
+  const firstCtx = context("wecom-user-1", "wecom:direct:peer", { sessionId: "session-aaa", mediaPaths: [shot] });
   const first = parse(await factory(firstCtx).execute("call-1", { action: "prepare", draft: draft("IT-20260910-110000-AAAA") }));
-  assert.equal(first.code, "AWAITING_CONFIRMATION");
   assert.equal(first.summary.imageCount, 1);
 
   const newCtx = context("wecom-user-1", "wecom:direct:peer", { sessionId: "session-bbb" });
-  const blocked = parse(await factory(newCtx).execute("call-2", { action: "prepare", draft: draft("IT-20260910-110100-BBBB") }));
-  assert.equal(blocked.code, "ALREADY_PENDING");
-  assert.equal(blocked.confirmationId, first.confirmationId);
-
-  const person = parse(await factory(newCtx).execute("call-3", { action: "status" }));
+  const person = parse(await factory(newCtx).execute("call-2", { action: "status" }));
   assert.equal(person.code, "PERSON_STATUS");
   assert.equal(person.pending.confirmationId, first.confirmationId);
-  assert.equal(person.pending.code, "AWAITING_CONFIRMATION");
+  assert.equal(person.pending.sameSession, false);
   assert.equal(person.pending.summary, "电脑死机");
-  assert.equal(person.pending.location, "智园");
   assert.equal(person.pending.problemDescription, undefined);
-  assert.equal(person.hintZh, undefined);
+  assert.match(person.replyZh, /^🔍 你有一张未提交的确认单（在另一个对话里建的）。\n\n💬 问题：电脑死机\n📍 地点：智园\n📎 附件：1份图片\n\n---\n\n\*\*请回复\*\*\n1\. 确认提交\n2\. 取消/);
 
-  const cancelled = parse(await factory(newCtx).execute("call-4", {
-    action: "cancel",
-    confirmationId: first.confirmationId,
-  }));
+  const cancelled = parse(await factory(newCtx).execute("call-3", { action: "cancel", confirmationId: first.confirmationId }));
   assert.equal(cancelled.code, "CANCELLED");
-  assert.equal(cancelled.summary, "电脑死机");
-  assert.equal(cancelled.location, "智园");
+  assert.equal(cancelled.replyZh, "🗑️ 好的，这张单已取消。\n有新问题直接发给我。");
 
-  const afterCancel = parse(await factory(newCtx).execute("call-5", {
-    action: "prepare",
-    draft: draft("IT-20260910-110200-CCCC"),
-  }));
+  const afterCancel = parse(await factory(newCtx).execute("call-4", { action: "prepare", draft: draft("IT-20260910-110200-CCCC") }));
   assert.equal(afterCancel.code, "AWAITING_CONFIRMATION");
+  assert.equal(afterCancel.replacedPrevious, false);
   assert.equal(afterCancel.summary.attachmentCount, 0);
 });
 
-test("新会话不能给上一会话的待确认单补附件，确认时也不并入新图", async (t) => {
+test("新对话里发的图不补到上一张；在新对话确认上一张只交旧图，新图留给下一张", async (t) => {
   const { stateDir, inbound } = await scratch(t, "session-lock");
   const oldShot = path.join(inbound, "old-session.png");
   const newShot = path.join(inbound, "new-session.png");
@@ -686,72 +626,25 @@ test("新会话不能给上一会话的待确认单补附件，确认时也不�
       },
     }),
   });
-  const firstCtx = context("wecom-user-1", "wecom:direct:peer", {
-    sessionId: "session-aaa",
-    mediaPaths: [oldShot],
-  });
-  const first = parse(await factory(firstCtx).execute("call-1", {
-    action: "prepare",
-    draft: draft("IT-20260910-130000-LOCK"),
-  }));
-  assert.equal(first.code, "AWAITING_CONFIRMATION");
-  assert.equal(first.retentionHours, 24);
-  assert.equal(first.sameSession, true);
+  const firstCtx = context("wecom-user-1", "wecom:direct:peer", { sessionId: "session-aaa", mediaPaths: [oldShot] });
+  const first = parse(await factory(firstCtx).execute("call-1", { action: "prepare", draft: draft("IT-20260910-130000-LOCK") }));
   assert.equal(first.summary.imageCount, 1);
 
-  const newCtx = context("wecom-user-1", "wecom:direct:peer", {
-    sessionId: "session-bbb",
-    mediaPaths: [newShot],
-  });
-  rememberInboundMedia(mediaScope(newCtx), [{ localPath: newShot, fileName: "new-session.png" }]);
-  const blockedPrepare = parse(await factory(newCtx).execute("call-2", {
-    action: "prepare",
-    draft: draft("IT-20260910-130100-NEW"),
-  }));
-  assert.equal(blockedPrepare.code, "ALREADY_PENDING");
-  assert.equal(blockedPrepare.sameSession, false);
-  assert.equal(blockedPrepare.retentionHours, 24);
-  assert.equal(blockedPrepare.confirmationId, first.confirmationId);
-  assert.equal(blockedPrepare.summary, "电脑死机");
-  assert.equal(blockedPrepare.location, "智园");
-  assert.equal(blockedPrepare.imageCount, 1);
-  assert.ok(blockedPrepare.expiresAt);
+  const newCtx = context("wecom-user-1", "wecom:direct:peer", { sessionId: "session-bbb", mediaPaths: [newShot] });
+  const buffered = parse(await factory(newCtx).execute("call-2", { action: "attach", confirmationId: first.confirmationId }));
+  assert.equal(buffered.code, "BUFFERED");
+  assert.equal((await getTicket(stateStore, first.confirmationId)).staged.length, 1);
 
-  const blockedAttach = parse(await factory(newCtx).execute("call-3", {
-    action: "attach",
-    confirmationId: first.confirmationId,
-  }));
-  assert.equal(blockedAttach.code, "ALREADY_PENDING");
-  assert.equal(blockedAttach.sameSession, false);
-  assert.equal(blockedAttach.retentionHours, 24);
-
-  const blockedInbox = parse(await factory(newCtx).execute("call-4", { action: "attach" }));
-  assert.equal(blockedInbox.code, "ALREADY_PENDING");
-  assert.equal(blockedInbox.sameSession, false);
-
-  const person = parse(await factory(newCtx).execute("call-5", { action: "status" }));
-  assert.equal(person.pending.sameSession, false);
-  assert.equal(person.pending.retentionHours, 24);
-  assert.equal(person.pending.imageCount, 1);
-
-  const submitted = parse(await factory(newCtx).execute("call-6", {
-    action: "submit_confirmed",
-    confirmationId: first.confirmationId,
-  }));
+  const submitted = parse(await factory(newCtx).execute("call-3", { action: "submit_confirmed", confirmationId: first.confirmationId }));
   assert.equal(submitted.code, "SUBMITTED");
-  assert.equal(submitted.summary, "电脑死机");
-  assert.equal(submitted.location, "智园");
   assert.equal(submitted.imageCount, 1);
+  assert.match(submitted.replyZh, /^✅ \*\*已提交到 OA\*\*\n\n💬 问题：电脑死机\n📍 地点：智园\n📎 附件：1份图片\n🎫 工单号：1500009\n👤 处理人：/);
   const description = capturedPayload.mainData.find((field) => field.fieldName === "wtxqmskftp").fieldValue;
   assert.match(description, /alt="old-session.png"/);
   assert.doesNotMatch(description, /new-session\.png/);
+  assert.equal(await getActiveTicket(stateStore, ownerOf().identity), null);
 
-  const ownerA = ownerOf("wecom-user-1", "session-aaa");
-  assert.equal(await getActiveTicket(stateStore, ownerA.identity), null);
-  assert.equal(peekInboundMedia(mediaScope(newCtx)).some((item) => item.localPath === newShot), true);
-
-  const nextCtx = context("wecom-user-1", "wecom:direct:peer", { sessionId: "session-bbb" });
-  const next = parse(await factory(nextCtx).execute("call-7", {
+  const next = parse(await factory(context("wecom-user-1", "wecom:direct:peer", { sessionId: "session-bbb" })).execute("call-4", {
     action: "prepare",
     draft: draft("IT-20260910-130200-NEXT"),
   }));
@@ -827,15 +720,16 @@ test("attach 能并入 hook 按单聊 sessionKey 记住的 inbound，即使工�
   await writeFile(shot, "image-bytes");
   const sender = "wo0vXZbQAAw1RkQccme3mRCuO0ChEJ9g";
   const sessionKey = `agent:itservicedeskagent:wecom:direct:${sender.toLowerCase()}`;
+  const stateStore = createTestStore();
   const factory = createOAWorkflowToolFactory({
     stateDir,
-    stateStore: createTestStore(),
+    stateStore,
     dependencies: dependencies(),
   });
   const ctx = context(sender, sessionKey, { sessionId: "sid-uuid" });
   const prepared = parse(await factory(ctx).execute("call-1", { action: "prepare", draft: draft() }));
   assert.equal(prepared.code, "AWAITING_CONFIRMATION");
-  rememberInboundMedia(sessionKey, [{ localPath: shot, fileName: "hook.png" }]);
+  await hookCapture(stateStore, stateDir, { sessionKey }, [{ localPath: shot, fileName: "hook.png" }]);
   const attached = parse(await factory(ctx).execute("call-2", {
     action: "attach",
     confirmationId: prepared.confirmationId,
@@ -845,24 +739,17 @@ test("attach 能并入 hook 按单聊 sessionKey 记住的 inbound，即使工�
   assert.equal(attached.imageCount, 1);
 });
 
-test("inbound 文件暂存失败时不丢掉 hook 缓冲", async (t) => {
-  const { stateDir } = await scratch(t, "attach-keep-buffer");
-  const factory = createOAWorkflowToolFactory({
-    stateDir,
-    stateStore: createTestStore(),
-    dependencies: dependencies(),
-  });
-  const ctx = context();
-  const prepared = parse(await factory(ctx).execute("call-1", { action: "prepare", draft: draft() }));
-  const missing = path.join(stateDir, "media", "inbound", "gone.png");
-  rememberInboundMedia(mediaScope(ctx), [{ localPath: missing, fileName: "gone.png" }]);
-  const result = parse(await factory(ctx).execute("call-2", {
-    action: "attach",
-    confirmationId: prepared.confirmationId,
-  }));
-  assert.equal(result.code, "NO_NEW_ATTACHMENT");
-  assert.equal(result.addedCount, 0);
-  assert.equal(peekInboundMedia(mediaScope(ctx)).length, 1);
+test("hook 报的文件还没落盘时先不收，之后再报能收下", async (t) => {
+  const { stateDir, inbound } = await scratch(t, "attach-late-file");
+  const late = path.join(inbound, "late.png");
+  const stateStore = createTestStore();
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore, dependencies: dependencies() });
+  await hookCapture(stateStore, stateDir, context(), [{ localPath: late, fileName: "late.png" }]);
+  assert.equal(await readInbox(stateStore, ownerOf().identity), null);
+  await writeFile(late, "image-bytes");
+  const attached = parse(await factory(context("wecom-user-1", "room-1", { mediaPaths: [late] })).execute("call-1", { action: "attach" }));
+  assert.equal(attached.code, "BUFFERED");
+  assert.equal(attached.imageCount, 1);
 });
 
 test("工单记录没有 location 时 status 仍从 systemName 兑底园区", async (t) => {
@@ -934,13 +821,13 @@ test("prepare 之前两轮 attach 重叠时两张图都进 inbox，不互相覆�
   assert.deepEqual(results.map((item) => item.code).sort(), ["BUFFERED", "BUFFERED"]);
   assert.equal(results.reduce((sum, item) => sum + item.addedCount, 0), 2);
 
-  const inbox = await getInbox(stateStore, pendingOwner.identity, pendingOwner.session);
+  const inbox = await readInbox(stateStore, pendingOwner.identity);
   const fileNames = (inbox?.items || []).map((item) => item.fileName).sort();
   assert.deepEqual(fileNames, ["blue-screen.png", "wiring.png"]);
   const storedNames = (inbox?.items || []).map((item) => item.storedName);
   assert.equal(new Set(storedNames).size, 2);
 
-  const inboxDir = path.join(stagingPaths(stateDir).stagingRoot, inboxDirName(pendingOwner.identity, pendingOwner.session));
+  const inboxDir = path.join(stagingPaths(stateDir).stagingRoot, inboxDirName(pendingOwner.identity));
   const stagedFiles = (await readdir(inboxDir)).sort();
   assert.equal(stagedFiles.length, 2);
 
@@ -1003,7 +890,7 @@ test("prepare 与 attach 并发：快照之后落库的那张图不会被收尾�
   const stagedFiles = await readdir(path.join(stagingPaths(stateDir).stagingRoot, prepared.confirmationId));
   assert.equal(stagedFiles.length, 2);
 
-  assert.equal(await getInbox(stateStore, pendingOwner.identity, pendingOwner.session), null);
+  assert.equal((await readInbox(stateStore, pendingOwner.identity))?.items?.length || 0, 0);
 });
 
 test("prepare 已写入工单后 inbox 清理失败不得删 staging，仍返回待确认", async (t) => {
@@ -1021,7 +908,7 @@ test("prepare 已写入工单后 inbox 清理失败不得删 staging，仍返回
 
   const originalRun = stateStore.db.run.bind(stateStore.db);
   stateStore.db.run = async (sql, params) => {
-    if (/^DELETE FROM oa_inbox WHERE sender_code = \? AND session_code/.test(sql)) {
+    if (/^REPLACE INTO oa_inbox/.test(sql)) {
       throw new Error("inbox cleanup failed after ticket insert");
     }
     return originalRun(sql, params);
@@ -1090,9 +977,9 @@ test("cancel 释放 pending 后，同会话新 attach 的 inbox 不能被旧单�
   assert.equal(attached.code, "BUFFERED");
   assert.equal(attached.addedCount, 1);
 
-  const inbox = await getInbox(stateStore, pendingOwner.identity, pendingOwner.session);
+  const inbox = await readInbox(stateStore, pendingOwner.identity);
   assert.deepEqual((inbox?.items || []).map((item) => item.fileName), ["next.png"]);
-  const inboxDir = path.join(stagingPaths(stateDir).stagingRoot, inboxDirName(pendingOwner.identity, pendingOwner.session));
+  const inboxDir = path.join(stagingPaths(stateDir).stagingRoot, inboxDirName(pendingOwner.identity));
   assert.deepEqual((await readdir(inboxDir)).sort(), ["01-next.png"]);
 });
 
@@ -1145,6 +1032,6 @@ test("过期回收清 inbox 时，不得删掉随后写入的新附件", async (
   assert.equal(status.pending, null);
   assert.equal(attached.code, "BUFFERED");
 
-  const inbox = await getInbox(stateStore, pendingOwner.identity, pendingOwner.session);
+  const inbox = await readInbox(stateStore, pendingOwner.identity);
   assert.deepEqual((inbox?.items || []).map((item) => item.fileName), ["fresh.png"]);
 });

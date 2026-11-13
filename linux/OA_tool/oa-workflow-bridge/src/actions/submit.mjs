@@ -1,5 +1,5 @@
 import { encodeStagedAttachments, limitExceeded } from "../attachments.mjs";
-import { moveInboxToTicket } from "../inbox.mjs";
+import { clearInboxItems, moveInboxToTicket } from "../inbox.mjs";
 import { buildCreatePayload, pendingFaultLocation, sanitizeSupplement } from "../mapping.mjs";
 import { inactiveCard, reconcileCard, submittedCard } from "../reply.mjs";
 import { expireTicket, getTicket, isActiveTicket, removeStagingDirectory, updateTicket, withStateLock } from "../store.mjs";
@@ -31,6 +31,7 @@ async function claimForSubmit(env) {
   const { store, stateDir, config, trust, params } = env;
   const { confirmationId } = params;
   return withStateLock(store, async () => {
+    let inbox = null;
     const ticket = await getTicket(store, confirmationId);
     if (!isActiveTicket(ticket)) return { outcome: ticket };
     if (ticket.identity !== trust.identity) {
@@ -45,8 +46,9 @@ async function claimForSubmit(env) {
     if (!config.active) return { inactive: ticket };
     // 同一对话里确认时随消息发来的新图并入；另一个对话里确认只提交旧单已有的附件。
     if (isSameSession(ticket, trust)) {
-      const { inbox, notices } = await captureToolMedia(env);
-      if (notices.rejected) throw limitExceeded();
+      const captured = await captureToolMedia(env);
+      inbox = captured.inbox;
+      if (captured.notices.rejected) throw limitExceeded();
       const moved = await moveInboxToTicket({
         store, stateDir, config, identity: trust.identity, inbox, confirmationId, staged: ticket.staged,
       });
@@ -54,6 +56,7 @@ async function claimForSubmit(env) {
     }
     await updateTicket(store, confirmationId, { status: "submitting", staged: ticket.staged });
     ticket.status = "submitting";
+    await clearInboxItems(store, trust.identity, inbox, config);
     // 必须在锁内登记：并发的第二次确认一拿到锁就会看见 submitting，要能找到这次的结果。
     const inflight = createDeferred();
     inflightSubmits.set(confirmationId, inflight.promise);

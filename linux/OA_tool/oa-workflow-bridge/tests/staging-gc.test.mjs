@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cleanupExpired, getTicket, inboxDirName, insertTicket, setInbox, stagingPaths } from "../src/store.mjs";
+import { cleanupExpired, getTicket, inboxDirName, insertTicket, stagingPaths, writeInbox } from "../src/store.mjs";
 import { createTestStore, setStatus } from "./helpers.mjs";
 
 async function makeStagingDir(stateDir, name, ageMs = 0) {
@@ -20,6 +20,10 @@ async function makeStagingDir(stateDir, name, ageMs = 0) {
 
 async function listStaging(stateDir) {
   return (await readdir(stagingPaths(stateDir).stagingRoot)).sort();
+}
+
+function emptyInbox(session) {
+  return { sessions: { ids: [session], keys: [] }, items: [], seen: [], rejected: 0, expiredNotice: false };
 }
 
 let seq = 0;
@@ -62,11 +66,11 @@ test("inbox 目录跟着库里记录走：记录还在就留着，过期了才�
   const store = createTestStore();
   const identity = "a".repeat(24);
   const session = "b".repeat(24);
-  const live = inboxDirName(identity, session);
-  const orphan = inboxDirName("c".repeat(24), "d".repeat(24));
+  const live = inboxDirName(identity);
+  const orphan = inboxDirName("c".repeat(24));
   await makeStagingDir(stateDir, live);
   await makeStagingDir(stateDir, orphan, 30 * 60 * 1000);
-  await setInbox(store, identity, session, [], 60_000);
+  await writeInbox(store, identity, emptyInbox(session), 60_000);
 
   assert.equal(await cleanupExpired(store, stateDir, Date.now()), 1);
   assert.deepEqual(await listStaging(stateDir), [live]);
@@ -100,12 +104,16 @@ test("提交中或对账中的过期单不回收 staging，也不改状态", asy
   assert.equal((await getTicket(store, "OA-UNKNOWN-FFFFFFFF")).status, "unknown");
 });
 
-test("过期的身份缓存与 inbox 记录被删除", async () => {
+test("过期的身份缓存删除；过期 inbox 留一天等员工回来提示，之后删除", async () => {
   const stateDir = await mkdtemp(path.join(tmpdir(), "oa-gc-rows-"));
   const store = createTestStore();
-  await setInbox(store, "a".repeat(24), "b".repeat(24), [], 1000);
+  await writeInbox(store, "a".repeat(24), emptyInbox("b".repeat(24)), 1000);
   await store.db.run("INSERT INTO oa_identity (mapping_code, oa_user_id, miss_code, expires_at) VALUES (?, ?, NULL, ?)", ["e".repeat(24), "1", Date.now() - 1]);
   store.now = () => Date.now() + 5000;
+  await cleanupExpired(store, stateDir, Date.now());
+  assert.equal((await store.db.query("SELECT COUNT(*) AS n FROM oa_inbox"))[0].n, 1);
+  assert.equal((await store.db.query("SELECT COUNT(*) AS n FROM oa_identity"))[0].n, 0);
+  store.now = () => Date.now() + 25 * 60 * 60 * 1000;
   await cleanupExpired(store, stateDir, Date.now());
   assert.equal((await store.db.query("SELECT COUNT(*) AS n FROM oa_inbox"))[0].n, 0);
   assert.equal((await store.db.query("SELECT COUNT(*) AS n FROM oa_identity"))[0].n, 0);

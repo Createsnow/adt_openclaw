@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { limitExceeded, MAX_STAGED_ATTACHMENTS, moveStagedFiles, stagedBytes, summarizeStaged } from "../attachments.mjs";
-import { moveInboxToTicket } from "../inbox.mjs";
+import { clearInboxItems, moveInboxToTicket } from "../inbox.mjs";
 import { hintZhFor } from "../hints.mjs";
 import { maskFileNames } from "../log-redact.mjs";
 import { allocateExternalTicketId, normalizeDraft } from "../mapping.mjs";
@@ -130,6 +130,11 @@ export async function prepare(env) {
       staged = [...staged, ...adopted];
       await insertTicket(store, { confirmationId, identity: trust.identity, session: trust.session, oaRequesterId, draft, staged, expiresAt });
       committed = true;
+      try {
+        await clearInboxItems(store, trust.identity, inbox, config);
+      } catch (cleanupError) {
+        logger?.warn?.(`[oa-workflow-bridge] ticket saved but inbox cleanup failed: ${cleanupError?.message || cleanupError}`);
+      }
     });
   } catch (error) {
     if (!committed) await ignoreErrors(removeStagingDirectory(stateDir, confirmationId));

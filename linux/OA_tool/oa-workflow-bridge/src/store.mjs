@@ -163,7 +163,7 @@ export async function updateTicket(store, confirmationId, { status, staged, requ
 
 /**
  * 读此人的 inbox。`expired` 表示已过 30 分钟未动；调用方决定是否清掉并提示员工。
- * 结构：sessions（会话码列表）、items（已落盘附件）、seen（本会话见过的去重键）、
+ * 结构：sessions（{ ids, keys } 会话码）、items（已落盘附件）、seen（本会话见过的去重键）、
  * rejected（超限未收的件数，待回执）、expiredNotice（上一批已过期，待提示）。
  */
 export async function readInbox(store, identity) {
@@ -174,8 +174,9 @@ export async function readInbox(store, identity) {
   );
   if (!rows[0]) return null;
   const state = parseJson(rows[0].state_json, {});
+  const sessions = parseJson(rows[0].session_codes, {});
   return {
-    sessions: parseJson(rows[0].session_codes, []),
+    sessions: { ids: Array.isArray(sessions.ids) ? sessions.ids : [], keys: Array.isArray(sessions.keys) ? sessions.keys : [] },
     items: Array.isArray(state.items) ? state.items : [],
     seen: Array.isArray(state.seen) ? state.seen : [],
     rejected: Number(state.rejected || 0),
@@ -203,7 +204,9 @@ export async function deleteInbox(store, stateDir, identity) {
 /** 只在 inbox 属于这个会话时删（取消 / 过期一张单时，清掉同一会话里还没进单的附件）。 */
 export async function deleteSessionInbox(store, stateDir, identity, session) {
   const inbox = await readInbox(store, identity);
-  if (inbox && inbox.sessions.includes(session)) await deleteInbox(store, stateDir, identity);
+  if (inbox && (inbox.sessions.ids.includes(session) || inbox.sessions.keys.includes(session))) {
+    await deleteInbox(store, stateDir, identity);
+  }
 }
 
 /**

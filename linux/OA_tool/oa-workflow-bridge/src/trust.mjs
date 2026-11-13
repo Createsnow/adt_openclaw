@@ -21,17 +21,19 @@ export function sessionCode(ctx) {
   return digest(String(ctx?.sessionId || ctx?.SessionId || ctx?.sessionKey || ctx?.SessionKey || "").trim());
 }
 
-/** 同一会话可能出现的所有会话码：hook 常常只有 sessionKey，工具 ctx 还有 sessionId。 */
+/**
+ * 会话码拆成两种：id（OpenClaw sessionId，`/new` 后会变）与 key（sessionKey，单聊长期不变）。
+ * hook 常常只有 key，工具 ctx 两个都有。判断是不是同一个对话时 id 优先，见 inbox.mjs。
+ */
 export function sessionCodes(ctx) {
-  const tokens = [ctx?.sessionId || ctx?.SessionId, ctx?.sessionKey || ctx?.SessionKey]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-  return [...new Set(tokens.map(digest))];
+  const id = String(ctx?.sessionId || ctx?.SessionId || "").trim();
+  const key = String(ctx?.sessionKey || ctx?.SessionKey || "").trim();
+  return { id: id ? digest(id) : "", key: key ? digest(key) : "" };
 }
 
 export function requireTrustedContext(ctx) {
   if (ctx.messageChannel !== "wecom" || !ctx.requesterSenderId || (!ctx.sessionKey && !ctx.sessionId)) {
     throw new OAClientError("OA submission requires a trusted WeCom sender context", { code: "UNTRUSTED_CONTEXT" });
   }
-  return { identity: identityCode(ctx.requesterSenderId), session: sessionCode(ctx), sessions: sessionCodes(ctx) };
+  return { identity: identityCode(ctx.requesterSenderId), session: sessionCode(ctx) };
 }

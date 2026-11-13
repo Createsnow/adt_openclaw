@@ -40,3 +40,9 @@ export async function expireNow(store, confirmationId) {
 export async function setStatus(store, confirmationId, status) {
   await updateTicket(store, confirmationId, { status });
 }
+
+/** 模拟企微 hook 收到附件：直接落进 inbox（与 index.mjs 的 hook 同一条路径）。 */
+export async function hookCapture(store, stateDir, source, attachments, config = { maxAttachmentBytes: 1024 * 1024, maxTotalAttachmentBytes: 2 * 1024 * 1024, inboxTtlMinutes: 30 }) {
+  const { captureInbound } = await import("../src/inbox.mjs");
+  return captureInbound({ store, stateDir, config, source, attachments });
+}

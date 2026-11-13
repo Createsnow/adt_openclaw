@@ -84,16 +84,19 @@ test("MySQL：建表幂等、完整走一遍待确认 → 补图 → 提交 / �
   const prepared = parse(await factory(context("u1")).execute("2", { action: "prepare", draft }));
   assert.equal(prepared.code, "AWAITING_CONFIRMATION");
   assert.equal(prepared.summary.imageCount, 1);
-  const blocked = parse(await factory(context("u1", { sessionKey: "other-room" })).execute("3", {
+  // 同一人在另一个对话里报新问题：作废上一张、按新问题建单。
+  const replacing = parse(await factory(context("u1", { sessionKey: "other-room" })).execute("3", {
     action: "prepare",
-    draft: { ...draft, summary: "又一个问题", problemDescription: "又一个问题。" },
+    draft: { ...draft, problemDescription: "又一个问题。" },
   }));
-  assert.equal(blocked.code, "ALREADY_PENDING");
-  assert.equal(blocked.sameSession, false);
-  const submitted = parse(await factory(context("u1")).execute("4", { action: "submit_confirmed", confirmationId: prepared.confirmationId }));
+  assert.equal(replacing.code, "AWAITING_CONFIRMATION");
+  assert.equal(replacing.replacedPrevious, true);
+  assert.equal((await getTicket(store, prepared.confirmationId)).status, "cancelled");
+  const submitted = parse(await factory(context("u1", { sessionKey: "other-room" })).execute("4", { action: "submit_confirmed", confirmationId: replacing.confirmationId }));
   assert.equal(submitted.code, "SUBMITTED");
   assert.equal(submitted.requestId, "1600001");
-  const stored = await getTicket(store, prepared.confirmationId);
+  assert.match(submitted.replyZh, /^✅ \*\*已提交到 OA\*\*/);
+  const stored = await getTicket(store, replacing.confirmationId);
   assert.equal(stored.status, "submitted");
   assert.equal(stored.draft, null);
 

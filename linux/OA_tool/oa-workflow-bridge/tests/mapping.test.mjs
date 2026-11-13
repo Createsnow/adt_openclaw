@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { loadSystems } from "../src/config.mjs";
-import { allocateExternalTicketId, buildCreatePayload, normalizeDraft, pendingFaultLocation } from "../src/mapping.mjs";
+import { allocateExternalTicketId, buildCreatePayload, normalizeDraft, pendingFaultLocation, summarize } from "../src/mapping.mjs";
 
 function oaConfig(overrides = {}) {
   return { workflowId: 602, attachmentFieldName: "", isnextflow: "0", ...overrides };
@@ -70,7 +70,7 @@ test("运维支持映射到已批准的OA字段和选项值", () => {
   assert.doesNotMatch(description, /xA工单编号/);
   assert.doesNotMatch(description, /IT-20260805-120000-AB12/);
   assert.equal(payload.mainData.find((field) => field.fieldName === "clry").fieldValue, "18196,10251");
-  assert.equal(payload.requestName, "[IT-20260805-120000-AB12] 生产线MES无法登录");
+  assert.equal(payload.requestName, "[IT-20260805-120000-AB12] A栋二楼生产线MES无法登录");
 });
 
 test("IT需求必须包含需求类型和月节约工时", () => {
@@ -453,7 +453,7 @@ test("非法 location 或与系统名园区不一致时拒绝", () => {
       summary: "电脑死机",
       problemDescription: "电脑死机。",
     }, SYSTEMS),
-    /location must be one of/,
+    /location must be A–F or one of/,
   );
   assert.throws(
     () => normalizeDraft({
@@ -522,4 +522,36 @@ test("缺少或非法 isnextflow 时拒绝生成请求", () => {
     }),
     /isnextflow must be "0" or "1"/,
   );
+});
+
+test("问题预览由插件从员工原话截取，模型传的 summary 不再使用", () => {
+  assert.equal(summarize("电脑死机。"), "电脑死机");
+  assert.equal(summarize("4 个厂区同时用一套系统接单号，目前在文件系统里操作。数据会丢。"), "4 个厂区同时用一套系统接单号...");
+  assert.equal(summarize("这是一段非常非常非常非常非常非常长没有标点的描述内容啊啊啊"), "这是一段非常非常非常非常非常非常长没有标...");
+  const draft = normalizeDraft({
+    externalTicketId: "IT-20260805-120000-SUM1",
+    ticketType: "运维支持",
+    systemName: "OA系统",
+    summary: "模型改写过的另一句",
+    problemDescription: "OA 待办打不开。",
+  }, SYSTEMS);
+  assert.equal(draft.summary, "OA 待办打不开");
+});
+
+test("地点可传字母 A–F，插件翻译成园区名", () => {
+  const draft = normalizeDraft({
+    externalTicketId: "IT-20260805-120000-LOCA",
+    ticketType: "运维支持",
+    systemName: "电脑/打印机/网络问题（智园）",
+    location: "a",
+    problemDescription: "电脑死机。",
+  }, SYSTEMS);
+  assert.equal(draft.location, "智园");
+  assert.throws(() => normalizeDraft({
+    externalTicketId: "IT-20260805-120000-LOCB",
+    ticketType: "运维支持",
+    systemName: "电脑/打印机/网络问题（智园）",
+    location: "1",
+    problemDescription: "电脑死机。",
+  }, SYSTEMS), (error) => error.code === "INVALID_LOCATION");
 });

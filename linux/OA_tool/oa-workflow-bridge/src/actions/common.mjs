@@ -22,9 +22,9 @@ export function belongsTo(ticket, trust) {
   return Boolean(ticket?.identity && ticket.identity === trust.identity);
 }
 
-/** 工单是不是在当前这个对话里建的（会话码可能是 sessionId 或 sessionKey 算出来的）。 */
+/** 工单是不是在当前这个对话里建的。 */
 export function isSameSession(ticket, trust) {
-  return Boolean(ticket?.session && (trust?.sessions || [trust?.session]).includes(ticket.session));
+  return Boolean(ticket?.session && trust?.session && ticket.session === trust.session);
 }
 
 /** 回执里回显给员工的问题预览、地点、附件计数。 */
@@ -73,7 +73,7 @@ export async function captureToolMedia({ store, stateDir, config, ctx, trust, pa
     source: ctx,
     attachments: collectToolMedia(ctx, params?.attachments, stateDir),
   });
-  const inbox = captured?.inbox || { sessions: trust.sessions, items: [], seen: [], rejected: 0, expiredNotice: false };
+  const inbox = captured?.inbox || { sessions: { ids: [], keys: [] }, items: [], seen: [], rejected: 0, expiredNotice: false };
   const notices = await takeInboxNotices(store, trust.identity, captured?.inbox, config);
   return { inbox, notices };
 }

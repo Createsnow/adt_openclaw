@@ -4,14 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { cleanupExpired, getActiveTicket, getLatestTicketByExternalId, getTicket, stagingPaths } from "../src/store.mjs";
-import { createTestStore, expireNow, setStatus } from "./helpers.mjs";
+import { createTestStore, expireNow, hookCapture, setStatus } from "./helpers.mjs";
 import { OAClientError } from "../src/oa-client.mjs";
-import { clearInboundMedia, mediaScope, rememberInboundMedia } from "../src/inbound-media.mjs";
 import { createOAWorkflowToolFactory } from "../src/tool.mjs";
-
-test.beforeEach(() => {
-  clearInboundMedia();
-});
 
 function parse(result) {
   return JSON.parse(result.content[0].text);
@@ -61,6 +56,7 @@ function dependencies({ active = true, createRequest, identity, identityAdapter,
       options: new Map([["MES系统（越南B部）", 8], ["其他", 17]]),
       typeSystems: new Map([["运维支持", new Set(["MES系统（越南B部）", "其他"])], ["权限申请", new Set(["其他"])], ["IT需求", new Set(["其他"])]]),
       handlers: new Map([["MES系统（越南B部）", "18196,10251"], ["其他", "4280"]]),
+      names: new Map([["MES系统（越南B部）", "庞立亮、阮氏秋香"], ["其他", "易淑恒"]]),
     }),
     clientFactory: () => ({ createRequest }),
     lookupRequesterProfile: lookupRequesterProfile || (async () => ({
@@ -86,7 +82,6 @@ function failWhenWritingSubmitted(store) {
 test("本轮 inbound / ctx 有图时 prepare 自动暂存，模型不必传路径", async (t) => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-auto-att-"));
   t.after(() => {
-    clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
   });
   const inbound = path.join(stateDir, "media", "inbound");
@@ -95,12 +90,13 @@ test("本轮 inbound / ctx 有图时 prepare 自动暂存，模型不必传路�
   const second = path.join(inbound, "extra.txt");
   await writeFile(first, "image-auto");
   await writeFile(second, "text-extra");
-  rememberInboundMedia(mediaScope(context("wecom-user-1", "room-auto")), [{ localPath: first, fileName: "自动截图.png" }]);
+  const stateStore = createTestStore();
+  await hookCapture(stateStore, stateDir, context("wecom-user-1", "room-auto"), [{ localPath: first, fileName: "自动截图.png" }]);
 
   let capturedPayload;
   const factory = createOAWorkflowToolFactory({
     stateDir,
-    stateStore: createTestStore(),
+    stateStore,
     dependencies: dependencies({
       createRequest: async (payload) => {
         capturedPayload = payload;
@@ -135,14 +131,14 @@ test("本轮 inbound / ctx 有图时 prepare 自动暂存，模型不必传路�
 test("prepare 跳过已不存在的 inbound 路径，仍暂存当前截图", async (t) => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-skip-stale-"));
   t.after(() => {
-    clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
   });
   const inbound = path.join(stateDir, "media", "inbound");
   await mkdir(inbound, { recursive: true });
   const current = path.join(inbound, "now.png");
   await writeFile(current, "image-now");
-  rememberInboundMedia(mediaScope(context("wecom-user-1", "room-stale")), [
+  const stateStore = createTestStore();
+  await hookCapture(stateStore, stateDir, context("wecom-user-1", "room-stale"), [
     { localPath: "<本地路径>", fileName: "placeholder.png" },
     { localPath: path.join(inbound, "missing-old.png"), fileName: "旧图.png" },
     { localPath: current, fileName: "当前截图.png" },
@@ -150,7 +146,7 @@ test("prepare 跳过已不存在的 inbound 路径，仍暂存当前截图", asy
 
   const factory = createOAWorkflowToolFactory({
     stateDir,
-    stateStore: createTestStore(),
+    stateStore,
     dependencies: dependencies({
       createRequest: async () => ({ requestId: "1492078" }),
     }),
@@ -166,7 +162,6 @@ test("prepare 跳过已不存在的 inbound 路径，仍暂存当前截图", asy
 test("prepare 接受 workspace/media/inbound 通道原件，不静默丢掉", async (t) => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-ws-in-"));
   t.after(() => {
-    clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
   });
   const configInbound = path.join(stateDir, "media", "inbound");
@@ -175,13 +170,14 @@ test("prepare 接受 workspace/media/inbound 通道原件，不静默丢掉", as
   await mkdir(workspaceInbound, { recursive: true });
   const fromWorkspace = path.join(workspaceInbound, "channel.png");
   await writeFile(fromWorkspace, "image-workspace");
-  rememberInboundMedia(mediaScope(context("wecom-user-1", "room-ws")), [
+  const stateStore = createTestStore();
+  await hookCapture(stateStore, stateDir, context("wecom-user-1", "room-ws"), [
     { localPath: fromWorkspace, fileName: "通道截图.png" },
   ]);
 
   const factory = createOAWorkflowToolFactory({
     stateDir,
-    stateStore: createTestStore(),
+    stateStore,
     dependencies: dependencies({
       createRequest: async () => ({ requestId: "1492080" }),
     }),
@@ -198,7 +194,6 @@ test("prepare 跳过其他目录的 inbound 形路径，仍暂存当前截图", 
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-skip-outside-"));
   const otherRoot = await mkdtemp(path.join(os.tmpdir(), "xa-oa-other-in-"));
   t.after(() => {
-    clearInboundMedia();
     return Promise.all([
       rm(stateDir, { recursive: true, force: true }),
       rm(otherRoot, { recursive: true, force: true }),
@@ -212,14 +207,15 @@ test("prepare 跳过其他目录的 inbound 形路径，仍暂存当前截图", 
   const outsider = path.join(otherInbound, "resized.png");
   await writeFile(current, "image-now");
   await writeFile(outsider, "image-resized");
-  rememberInboundMedia(mediaScope(context("wecom-user-1", "room-outside")), [
+  const stateStore = createTestStore();
+  await hookCapture(stateStore, stateDir, context("wecom-user-1", "room-outside"), [
     { localPath: outsider, fileName: "resized.png" },
     { localPath: current, fileName: "当前截图.png" },
   ]);
 
   const factory = createOAWorkflowToolFactory({
     stateDir,
-    stateStore: createTestStore(),
+    stateStore,
     dependencies: dependencies({
       createRequest: async () => ({ requestId: "1492079" }),
     }),
@@ -269,7 +265,6 @@ test("同一轮 ctx.mediaPaths 只在 prepare 暂存一次，submit 不重复", 
 test("确认消息带新 inbound 会追加，prepare 已暂存的同一路径不重复", async (t) => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-confirm-att-"));
   t.after(() => {
-    clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
   });
   const inbound = path.join(stateDir, "media", "inbound");
@@ -981,7 +976,7 @@ test("OA 已成功后库里写 submitted 失败时不改判 failed，重提不�
   assert.equal(ledger.requestId, "1509001", "OA 单号留在待对账记录里");
 
   const nextPrepare = parse(await tool.execute("call-3", { action: "prepare", draft: draft("IT-20260805-121541-C1N1") }));
-  assert.equal(nextPrepare.code, "ALREADY_PENDING");
+  assert.equal(nextPrepare.code, "RECONCILIATION_REQUIRED", "对账中的单仍挡住新单，不会被替换");
   assert.equal(createCount, 1);
 
   const retry = parse(await tool.execute("call-4", {
@@ -1073,3 +1068,67 @@ test("cancel 缺 confirmationId 返回 MISSING_CONFIRMATION_ID 与中文 hintZh"
   assert.match(result.hintZh, /确认号/);
 });
 
+
+test("确认卡由插件拼好：replyZh 就是员工看到的整段", async (t) => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-card-"));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore: createTestStore(), dependencies: dependencies({ createRequest: async () => ({ requestId: "1" }) }) });
+  const prepared = parse(await factory(context()).execute("call-1", { action: "prepare", draft: draft("IT-20260805-121600-CARD") }));
+  assert.equal(prepared.replyZh, [
+    "📋 **当前工单**",
+    "",
+    "💬 问题：越南A栋二楼MES终端提示登录失败",
+    "",
+    "内容不对或还缺信息，直接再写一句，或发图片、文档。",
+    "",
+    "---",
+    "",
+    "**请回复**",
+    "1. 确认提交",
+    "2. 取消",
+  ].join("\n"));
+});
+
+test("submitNow：员工原话要求直接提交时，一次调用建单并提交，回执是成功卡", async (t) => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-now-"));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
+  let createCount = 0;
+  const stateStore = createTestStore();
+  const factory = createOAWorkflowToolFactory({
+    stateDir,
+    stateStore,
+    dependencies: dependencies({ createRequest: async () => { createCount += 1; return { requestId: "1600001" }; } }),
+  });
+  const result = parse(await factory(context()).execute("call-1", {
+    action: "prepare",
+    submitNow: true,
+    draft: draft("IT-20260805-121700-NOW1"),
+  }));
+  assert.equal(result.code, "SUBMITTED");
+  assert.equal(createCount, 1);
+  assert.equal(result.replyZh, "✅ **已提交到 OA**\n\n💬 问题：越南A栋二楼MES终端提示登录失败\n🎫 工单号：1600001\n👤 处理人：庞立亮、阮氏秋香");
+  assert.equal(await getActiveTicket(stateStore, (await getTicket(stateStore, (await stateStore.db.query("SELECT confirmation_id FROM oa_ticket"))[0].confirmation_id)).identity), null);
+});
+
+test("status context：含糊回复先请改口再重发确认卡；报了 OA 单号先说明不能按号查", async (t) => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-ctx-"));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore: createTestStore(), dependencies: dependencies({ createRequest: async () => ({ requestId: "1" }) }) });
+  const empty = parse(await factory(context()).execute("call-1", { action: "status", context: "asked_oa_number" }));
+  assert.equal(empty.replyZh, "目前还不能按工单号查询处理进度。\n🔍 目前没有待确认或已提交的记录。\n有新问题直接发给我。");
+  await factory(context()).execute("call-2", { action: "prepare", draft: draft("IT-20260805-121800-CTX1") });
+  const nudged = parse(await factory(context()).execute("call-3", { action: "status", context: "unclear_reply" }));
+  assert.match(nudged.replyZh, /^还没有提交哦。\n想交请回「1」或「确认提交」，想作废请回「2」或「取消」。\n「不用了」我分不清你是想交还是想取消。\n\n📋 \*\*当前工单\*\*/);
+});
+
+test("员工可见回复兜底：没有专门卡片的码也带 replyZh（等于 hintZh）", async (t) => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-fallback-"));
+  t.after(() => rm(stateDir, { recursive: true, force: true }));
+  const factory = createOAWorkflowToolFactory({ stateDir, stateStore: createTestStore(), dependencies: dependencies({ createRequest: async () => ({ requestId: "1" }) }) });
+  const result = parse(await factory(context()).execute("call-1", { action: "cancel" }));
+  assert.equal(result.replyZh, result.hintZh);
+  assert.match(result.replyZh, /确认号/);
+});

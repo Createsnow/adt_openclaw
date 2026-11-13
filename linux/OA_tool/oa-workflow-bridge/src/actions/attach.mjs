@@ -1,7 +1,7 @@
 import { limitExceeded, summarizeStaged } from "../attachments.mjs";
 import { resolveInboxTtlMs } from "../config.mjs";
 import { attachmentReceiptHint, hintZhFor } from "../hints.mjs";
-import { moveInboxToTicket } from "../inbox.mjs";
+import { clearInboxItems, moveInboxToTicket } from "../inbox.mjs";
 import { confirmCard, INBOX_EXPIRED } from "../reply.mjs";
 import { expireTicket, getActiveTicket, getTicket, isActiveTicket, updateTicket, withStateLock, writeInbox } from "../store.mjs";
 import { captureToolMedia, cardFields, fail, isExpired, isSameSession, maybeCleanup } from "./common.mjs";
@@ -44,6 +44,7 @@ export async function attach(env) {
       if (moved.length) {
         active.staged = [...active.staged, ...moved];
         await updateTicket(store, active.confirmationId, { staged: active.staged });
+        await clearInboxItems(store, trust.identity, inbox, config);
       }
       if (notices.rejected) throw limitExceeded();
       const counts = summarizeStaged(active.staged);
