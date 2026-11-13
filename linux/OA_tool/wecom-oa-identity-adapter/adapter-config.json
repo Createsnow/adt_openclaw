@@ -1,0 +1,12 @@
+{
+  "alignMode": "userid_equals_workcode",
+  "wecomBaseUrl": "https://qyapi.weixin.qq.com",
+  "oaBaseUrl": "https://adtekoa.com",
+  "wecomTokenCacheMs": 5400000,
+  "cache": {
+    "store": "redis",
+    "keyPrefix": "oa-workflow-bridge",
+    "ttlHours": 24,
+    "missTtlSeconds": 600
+  }
+}

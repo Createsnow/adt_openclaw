@@ -1,0 +1,200 @@
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "bailian": {
+        "baseUrl": "${AIDY_DOMESTIC_BASE_URL}",
+        "apiKey": "${AIDY_DOMESTIC_API_KEY}",
+        "api": "openai-completions",
+        "timeoutSeconds": 20,
+        "models": [
+          {
+            "id": "${AIDY_DOMESTIC_MODEL_ID}",
+            "name": "qwen3.8 flash",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "compat": {
+              "thinkingFormat": "qwen",
+              "supportsDeveloperRole": false
+            },
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer",
+    "resetByType": {
+      "group": {
+        "mode": "idle",
+        "idleMinutes": 30
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "skipBootstrap": true,
+      "bootstrapMaxChars": 40000,
+      "skills": []
+    },
+    "entries": {
+      "itservicedeskagent": {
+        "name": "ITServiceDeskAgent",
+        "workspace": "/home/node/.openclaw/workspace",
+        "agentDir": "/home/node/.openclaw/agents/itservicedeskagent/agent",
+        "model": "${AIDY_DOMESTIC_MODEL_REF}",
+        "thinkingDefault": "off",
+        "bootstrapMaxChars": 40000,
+        "skills": [],
+        "identity": {
+          "name": "小A",
+          "theme": "IT运维问题受理、身份核验与工单留痕",
+          "emoji": "🛠️"
+        },
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "minimal",
+          "alsoAllow": [
+            "oa_workflow"
+          ],
+          "deny": [
+            "group:fs",
+            "group:runtime",
+            "group:ui",
+            "group:web",
+            "group:automation"
+          ],
+          "elevated": {
+            "enabled": false
+          }
+        }
+      }
+    }
+  },
+  "tools": {
+    "profile": "minimal",
+    "alsoAllow": [
+      "oa_workflow"
+    ],
+    "sessions": {
+      "visibility": "tree"
+    },
+    "agentToAgent": {
+      "enabled": false,
+      "allow": []
+    },
+    "elevated": {
+      "enabled": false
+    },
+    "fs": {
+      "workspaceOnly": true
+    },
+    "media": {
+      "image": {
+        "enabled": false
+      },
+      "audio": {
+        "enabled": false
+      },
+      "video": {
+        "enabled": false
+      }
+    }
+  },
+  "bindings": [
+    {
+      "type": "route",
+      "agentId": "itservicedeskagent",
+      "match": {
+        "channel": "wecom",
+        "accountId": "default"
+      }
+    }
+  ],
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    },
+    "tailscale": {
+      "mode": "off"
+    },
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789"
+      ]
+    }
+  },
+  "plugins": {
+    "allow": [
+      "oa-workflow-bridge-redis",
+      "wecom-openclaw-plugin"
+    ],
+    "deny": [
+      "codex"
+    ],
+    "load": {
+      "paths": [
+        "/home/node/.openclaw/extensions/oa-workflow-bridge-redis"
+      ]
+    },
+    "entries": {
+      "oa-workflow-bridge-redis": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true
+        }
+      },
+      "wecom-openclaw-plugin": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true
+        }
+      },
+      "codex": {
+        "enabled": false
+      }
+    }
+  },
+  "channels": {
+    "wecom": {
+      "enabled": true,
+      "botId": "${AIDY_IT_WECOM_BOT_ID}",
+      "secret": "${AIDY_IT_WECOM_BOT_SECRET}",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "sendThinkingMessage": true,
+      "allowFrom": [
+        "*"
+      ]
+    }
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.9.2",
+    "migrations": {
+      "modelPolicyAllowlist": true
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-09-09T02:36:47.387Z",
+    "lastRunVersion": "2026.9.2",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  }
+}

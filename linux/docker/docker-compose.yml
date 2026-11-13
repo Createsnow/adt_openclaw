@@ -1,0 +1,81 @@
+services:
+  aidy-gateway:
+    image: ghcr.io/openclaw/openclaw:2026.9.2
+    container_name: aidy-gateway
+    user: "1000:1000"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    environment:
+      TZ: Asia/Shanghai
+      HOME: /home/node
+      OPENCLAW_GATEWAY_BIND: lan
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+    secrets:
+      - gateway_token
+      - wecom_bot_id
+      - wecom_bot_secret
+      - model_api_key
+      - model_base_url
+      - model_id
+      - model_ref
+      - oa_redis_password
+      - oa_api_user_id
+      - oa_app_secret
+      - wecom_identity_corpid
+      - wecom_identity_secret
+    volumes:
+      - ./config:/home/node/.openclaw
+      - ./workspace:/home/node/.openclaw/workspace
+      - ./extensions:/home/node/.openclaw/extensions
+      - ./entrypoint.sh:/entrypoint.sh:ro
+    # 只走本机 / SSH 隧道。改 ports 后必须 down && up，只 restart 不够。
+    ports:
+      - "127.0.0.1:18789:18789"
+    init: true
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://127.0.0.1:18789/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - aidy-shared
+
+networks:
+  aidy-shared:
+    external: true
+
+secrets:
+  gateway_token:
+    file: ./secrets/gateway_token.txt
+  wecom_bot_id:
+    file: ./secrets/wecom_bot_id.txt
+  wecom_bot_secret:
+    file: ./secrets/wecom_bot_secret.txt
+  model_api_key:
+    file: ./secrets/model_api_key.txt
+  model_base_url:
+    file: ./secrets/model_base_url.txt
+  model_id:
+    file: ./secrets/model_id.txt
+  model_ref:
+    file: ./secrets/model_ref.txt
+  oa_redis_password:
+    file: ./secrets/oa_redis_password.txt
+  oa_api_user_id:
+    file: ./secrets/oa_api_user_id.txt
+  oa_app_secret:
+    file: ./secrets/oa_app_secret.txt
+  wecom_identity_corpid:
+    file: ./secrets/wecom_identity_corpid.txt
+  wecom_identity_secret:
+    file: ./secrets/wecom_identity_secret.txt

@@ -1,0 +1,8 @@
+{
+  "id": "wecom-oa-identity-adapter",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>小A使用说明书</title>
+  <style>
+    :root {
+      --ink: #1c2430;
+      --muted: #5c6778;
+      --line: #d9e0e8;
+      --paper: #ffffff;
+      --bg: #f3f6f8;
+      --brand: #0b6e75;
+      --brand-dark: #084e54;
+      --brand-soft: #e6f4f4;
+      --accent: #d46a2e;
+      --ok: #1f7a45;
+      --ok-soft: #e7f6ec;
+      --warn: #9a6b12;
+      --warn-soft: #fff4d6;
+      --danger: #b42318;
+      --danger-soft: #fdecea;
+      --info: #155e8a;
+      --info-soft: #e8f3fb;
+      --shadow: 0 10px 30px rgba(28, 36, 48, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 16px/1.7 "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      color: var(--brand-dark);
+      text-decoration: none;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(160deg, #14919b, #0b6e75);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+    }
+    .top-meta { color: var(--muted); font-size: 13px; }
+
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 24px 80px;
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 28px;
+    }
+
+    .toc {
+      position: sticky;
+      top: 76px;
+      align-self: start;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px 14px;
+      box-shadow: var(--shadow);
+    }
+    .toc h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .toc a {
+      display: block;
+      color: var(--ink);
+      text-decoration: none;
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .toc a:hover { background: var(--brand-soft); color: var(--brand-dark); }
+
+    .hero, .card, section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+    .hero {
+      padding: 36px 36px 28px;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(20, 145, 155, 0.16), transparent 42%),
+        var(--paper);
+    }
+    .eyebrow {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand-dark);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    h1 { margin: 12px 0 8px; font-size: 36px; line-height: 1.2; }
+    .lead { margin: 0; color: var(--muted); font-size: 17px; max-width: 46em; }
+
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #eef2f5;
+      color: var(--ink);
+      font-size: 13px;
+    }
+
+    section { padding: 28px 32px; margin-top: 20px; }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 24px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    h3 { margin: 22px 0 8px; font-size: 18px; }
+    p { margin: 0 0 12px; }
+    ul, ol { margin: 0 0 12px; padding-left: 1.3em; }
+    li + li { margin-top: 6px; }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 18px 0 8px;
+    }
+    .step {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #f8fbfb;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--brand);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .step strong { display: block; margin-bottom: 4px; }
+    .step span { color: var(--muted); font-size: 14px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 4px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f4f8f8; }
+    .ok { color: var(--ok); font-weight: 700; }
+    .no { color: var(--danger); font-weight: 700; }
+
+    .callout {
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .callout.info { background: var(--info-soft); color: var(--info); }
+    .callout.warn { background: var(--warn-soft); color: var(--warn); }
+    .callout.ok { background: var(--ok-soft); color: var(--ok); }
+    .callout.danger { background: var(--danger-soft); color: var(--danger); }
+
+    .sample {
+      background: #0f1a22;
+      color: #e8eef2;
+      border-radius: 14px;
+      padding: 16px 18px;
+      font-family: ui-monospace, "Cascadia Mono", "Sarasa Mono SC", Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      line-height: 1.65;
+    }
+
+    .seq-wrap {
+      overflow-x: auto;
+      padding: 8px 0 4px;
+    }
+    .seq {
+      min-width: 760px;
+      width: 100%;
+      background: #f8fbfb;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+    .seq-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .mini {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: #f8fbfb;
+    }
+    .mini h3 { margin-top: 0; }
+
+    footer {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+    a { color: var(--brand-dark); }
+
+    @media (max-width: 920px) {
+      .wrap { grid-template-columns: 1fr; }
+      .toc { position: static; }
+      .steps, .grid-2 { grid-template-columns: 1fr 1fr; }
+      h1 { font-size: 28px; }
+      section, .hero { padding: 22px; }
+    }
+    @media (max-width: 640px) {
+      .steps, .grid-2 { grid-template-columns: 1fr; }
+      .top-meta { display: none; }
+    }
+    @media print {
+      .topbar, .toc { display: none; }
+      .wrap { display: block; padding: 0; }
+      .hero, section { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top">
+        <span class="brand-mark">🛠️</span>
+       小A
+      </a>
+      <div class="top-meta">员工使用说明书 · 2026-09-14</div>
+    </div>
+  </header>
+
+  <div class="wrap" id="top">
+    <nav class="toc" aria-label="目录">
+      <h2>目录</h2>
+      <a href="#intro">1. 这是什么</a>
+      <a href="#scope">2. 能帮你做什么</a>
+      <a href="#start">3. 怎么报修</a>
+      <a href="#seq">4. 办理时序</a>
+      <a href="#reply">5. 确认、改稿、取消</a>
+      <a href="#attach">6. 图片和语音</a>
+      <a href="#pending">7. 未提交的确认单</a>
+      <a href="#after">8. 提交之后</a>
+      <a href="#faq">9. 常见问题</a>
+      <a href="#contact">10. 联系人、联系方式、问题记录</a>
+    </nav>
+
+    <main>
+      <div class="hero">
+        <span class="eyebrow">企业内部 · 企业微信</span>
+        <h1>小A使用说明书</h1>
+        <p class="lead">电脑卡了、上不了网、打印机不行，或是要开权限，直接在企业微信里发给小A。它先帮你理成一张单，你确认后再交到 OA。</p>
+        <div class="pills">
+          <span class="pill">不必报工号</span>
+          <span class="pill">群聊、单聊：文字 / 图片 / 语音</span>
+          <span class="pill">内容描述暂时不支持附件</span>
+          <span class="pill">确认后才进 OA</span>
+          <span class="pill">同时只能有一张待确认单</span>
+        </div>
+      </div>
+
+      <section id="intro">
+        <h2>1. 这是什么</h2>
+        <p>小A是企业内部的 IT 服务台机器人。员工只走企业微信：把问题和地点说清楚。群聊、单聊都支持图片和语音输入。内容描述暂时不支持附件。小A负责整理事实，不会替你直接改系统，也不会在你确认前创建 OA 流程。</p>
+        <p>你不需要知道 OA 字段名、流程号或责任人编号。申请人由系统按你的企微身份自动对应，自报工号不能代替。</p>
+        <div class="callout info">群聊里请直接 @小A，否则它收不到这条报修。群聊、单聊都可以发图片，也可以直接语音输入。</div>
+        <div class="callout warn">内容描述<b>暂时不支持附件</b>。Word、PDF 等文件先不要发，问题请用文字、图片或语音说清楚。</div>
+      </section>
+
+      <section id="scope">
+        <h2>2. 能帮你做什么</h2>
+        <div class="grid-2">
+          <div class="mini">
+            <h3>可以报</h3>
+            <ul>
+              <li>电脑、网络、打印机故障</li>
+              <li>开通账号、菜单、访问权限</li>
+              <li>OA、邮箱、MES、企微等 IT 系统问题</li>
+              <li>流程新建 / 优化、数据处理、集成对接等 IT 需求</li>
+            </ul>
+          </div>
+          <div class="mini">
+            <h3>请走其他入口</h3>
+            <ul>
+              <li>人事、考勤、入转离</li>
+              <li>行政、后勤、固定资产申领</li>
+              <li>财务报销、对公付款</li>
+              <li>其它非 IT 业务事项</li>
+            </ul>
+          </div>
+        </div>
+        <h3>电脑 / 打印机 / 网络：先说园区</h3>
+        <p>这类故障需要地点才能分给对应小组。直接回复数字即可：</p>
+        <table>
+          <thead>
+            <tr><th>回复</th><th>园区</th><th>回复</th><th>园区</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>智园</td><td>4</td><td>越南</td></tr>
+            <tr><td>2</td><td>大磡</td><td>5</td><td>光明</td></tr>
+            <tr><td>3</td><td>深汕</td><td>6</td><td>泗洪</td></tr>
+          </tbody>
+        </table>
+        <p>邮箱、文件管理还要区分国内或越南；MES 还要区分越南 B 部或 C 部。小A拿不准时会列出候选项，不要猜。</p>
+      </section>
+
+      <section id="start">
+        <h2>3. 怎么报修</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <strong>打开小A</strong>
+            <span>企业微信找到 IT服务台机器人，单聊直接发；群聊先 @ 它。两种会话都可以发图片或语音。</span>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <strong>说清问题</strong>
+            <span>一句话说出故障或需求。电脑类带上园区。群聊、单聊都可以配图片或语音。内容描述暂时不支持附件。</span>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <strong>看确认卡</strong>
+            <span>小A会回显问题和地点，让你核对。内容不对就再写一句；群聊、单聊都可以再发图片或语音。附件暂时不能补。</span>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <strong>确认提交</strong>
+            <span>回复 <b>1</b> 或「确认提交」。要作废就回 <b>2</b> 或「取消」。</span>
+          </div>
+        </div>
+        <h3>推荐说法</h3>
+        <div class="sample">智园电脑蓝屏，已经重启两次还是不行。
+[可配一张报错图片，或直接语音说明]
+
+帮我提交：OA 待办打不开，点进去一直转圈。</div>
+        <div class="callout ok">原话里已经有「帮我提交 / 立刻提交」这类确定口吻，并且事实已齐时，小A会同一轮直接交到 OA，不再出现确认卡。</div>
+      </section>
+
+      <section id="seq">
+        <h2>4. 办理时序</h2>
+        <p>从你发消息，到 OA 出现工单，顺序如下。中间若还缺地点或系统，小A会先追问，不会提前建单。</p>
+        <div class="seq-wrap">
+          <svg class="seq" viewBox="0 0 900 520" role="img" aria-label="小A报修时序图">
+            <rect width="900" height="520" fill="#f8fbfb" />
+            <!-- actor boxes -->
+            <g font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="14" text-anchor="middle">
+              <rect x="48" y="18" width="110" height="36" rx="10" fill="#0b6e75" />
+              <text x="103" y="41" fill="#fff">员工</text>
+              <rect x="268" y="18" width="110" height="36" rx="10" fill="#155e8a" />
+              <text x="323" y="41" fill="#fff">企业微信</text>
+              <rect x="488" y="18" width="110" height="36" rx="10" fill="#d46a2e" />
+              <text x="543" y="41" fill="#fff">小A</text>
+              <rect x="708" y="18" width="110" height="36" rx="10" fill="#1f7a45" />
+              <text x="763" y="41" fill="#fff">OA</text>
+            </g>
+            <!-- lifelines -->
+            <g stroke="#b7c4cc" stroke-dasharray="4 5" stroke-width="2">
+              <line x1="103" y1="54" x2="103" y2="500" />
+              <line x1="323" y1="54" x2="323" y2="500" />
+              <line x1="543" y1="54" x2="543" y2="500" />
+              <line x1="763" y1="54" x2="763" y2="500" />
+            </g>
+            <!-- messages -->
+            <g font-family="Microsoft YaHei, Segoe UI, sans-serif" font-size="13">
+              <!-- 1 -->
+              <line x1="103" y1="92" x2="323" y2="92" stroke="#0b6e75" stroke-width="2" />
+              <polygon points="323,92 311,87 311,97" fill="#0b6e75" />
+              <text x="213" y="82" text-anchor="middle" fill="#084e54">1 文字 / 图片 / 语音</text>
+              <!-- 2 -->
+              <line x1="323" y1="136" x2="543" y2="136" stroke="#155e8a" stroke-width="2" />
+              <polygon points="543,136 531,131 531,141" fill="#155e8a" />
+              <text x="433" y="126" text-anchor="middle" fill="#155e8a">2 转交报修</text>
+              <!-- 3 -->
+              <line x1="543" y1="180" x2="103" y2="180" stroke="#d46a2e" stroke-width="2" />
+              <polygon points="103,180 115,175 115,185" fill="#d46a2e" />
+              <text x="323" y="170" text-anchor="middle" fill="#a35220">3 追问地点，或给出确认卡</text>
+              <!-- 4 -->
+              <line x1="103" y1="224" x2="543" y2="224" stroke="#0b6e75" stroke-width="2" />
+              <polygon points="543,224 531,219 531,229" fill="#0b6e75" />
+              <text x="323" y="214" text-anchor="middle" fill="#084e54">4 回复「1 确认提交」或再补图片 / 语音</text>
+              <!-- 5 -->
+              <line x1="543" y1="286" x2="763" y2="286" stroke="#1f7a45" stroke-width="2" />
+              <polygon points="763,286 751,281 751,291" fill="#1f7a45" />
+              <text x="653" y="276" text-anchor="middle" fill="#1f7a45">5 创建 IT 流程</text>
+              <!-- 6 -->
+              <line x1="763" y1="330" x2="543" y2="330" stroke="#1f7a45" stroke-width="2" />
+              <polygon points="543,330 555,325 555,335" fill="#1f7a45" />
+              <text x="653" y="320" text-anchor="middle" fill="#1f7a45">6 返回工单号</text>
+              <!-- 7 -->
+              <line x1="543" y1="392" x2="103" y2="392" stroke="#d46a2e" stroke-width="2" />
+              <polygon points="103,392 115,387 115,397" fill="#d46a2e" />
+              <text x="323" y="382" text-anchor="middle" fill="#a35220">7 「已提交到 OA」+ 工单号</text>
+            </g>
+            <!-- note -->
+            <rect x="430" y="244" width="226" height="28" rx="8" fill="#e7f6ec" stroke="#b7e0c4" />
+            <text x="543" y="263" text-anchor="middle" font-size="12" fill="#1f7a45" font-family="Microsoft YaHei, Segoe UI, sans-serif">仅在你确认之后才会建单</text>
+            <rect x="200" y="430" width="500" height="58" rx="10" fill="#fff4d6" stroke="#ead7a0" />
+            <text x="450" y="454" text-anchor="middle" font-size="13" fill="#7a5610" font-family="Microsoft YaHei, Segoe UI, sans-serif">回复「2 / 取消」则到此结束，不会进入 OA。</text>
+            <text x="450" y="474" text-anchor="middle" font-size="13" fill="#7a5610" font-family="Microsoft YaHei, Segoe UI, sans-serif">未确认的单保留 24 小时，过期后需重新说明问题。</text>
+          </svg>
+        </div>
+        <div class="seq-legend">
+          <span><i class="dot" style="background:#0b6e75"></i>你发出的操作</span>
+          <span><i class="dot" style="background:#155e8a"></i>企业微信转发</span>
+          <span><i class="dot" style="background:#d46a2e"></i>小A回复</span>
+          <span><i class="dot" style="background:#1f7a45"></i>写入 OA</span>
+        </div>
+      </section>
+
+      <section id="reply">
+        <h2>5. 确认、改稿、取消</h2>
+        <p>事实齐了之后，你会看到类似下面的确认卡。头行是「当前工单」，不是「请确认后提交」。</p>
+        <div class="sample">📋 当前工单
+
+💬 问题：电脑死机
+📍 地点：智园
+
+内容不对或还缺信息，直接再写一句；群聊、单聊都可以发图片或语音。内容描述暂时不支持附件。
+
+---
+
+请回复
+1. 确认提交
+2. 取消</div>
+        <table>
+          <thead>
+            <tr><th>你想做的事</th><th>怎么回</th><th>结果</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>交到 OA</td>
+              <td><b>1</b> 或「确认提交」</td>
+              <td>成功后会看到工单号和处理人</td>
+            </tr>
+            <tr>
+              <td>作废这张单</td>
+              <td><b>2</b> 或「取消」</td>
+              <td>描述和图片作废；下一张必须重新说问题</td>
+            </tr>
+            <tr>
+              <td>改文字</td>
+              <td>直接再写一句，不必加「补充：」</td>
+              <td>小A会并入描述，再给你看新的确认卡</td>
+            </tr>
+            <tr>
+              <td>补图片 / 语音</td>
+              <td>群聊或单聊直接发图片，或语音输入</td>
+              <td>追加到同一张单，状态不变。附件暂时不能补</td>
+            </tr>
+            <tr>
+              <td>立刻建单、跳过确认卡</td>
+              <td>原话写「帮我提交」「立刻提交」且事实已齐</td>
+              <td>同一轮直接提交，不再问 1 / 2</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout warn">「好的」「可以」「OK」「没问题」「就这样」「不用了」<b>不会</b>被当成确认或取消。想交请回 1，想作废请回 2。</div>
+      </section>
+
+      <section id="attach">
+        <h2>6. 图片和语音</h2>
+        <div class="callout warn">内容描述<b>暂时不支持附件</b>。Word、PDF 等文件先不要发。</div>
+        <ul>
+          <li>群聊、单聊都支持图片和语音输入。群聊请先 @小A；单聊直接发即可。</li>
+          <li>可以先发图片或语音，再补文字。小A会先记下，再追问还缺什么。</li>
+          <li>待确认阶段继续发图片或语音即可，不必先打「补充：」，也不必取消重开。</li>
+        </ul>
+        <div class="callout info">小A不会打开或解读图片内容。问题是什么，仍请用文字或语音说清楚。</div>
+      </section>
+
+      <section id="pending">
+        <h2>7. 未提交的确认单</h2>
+        <p>同一个人全局只能有 <b>一张</b> 待确认工单。上一张还没确认或取消时，不能开新单，也不能给旧单补图或改描述。</p>
+        <ul>
+          <li>换了一个聊天窗口，也可以直接确认或取消上一张，<b>不必回到原来的会话</b>。</li>
+          <li>无法在其他会话补交问题描述、图片、语音等内容信息。</li>
+          <li>单聊中会话太长时，输入 <b>/new</b> 可以开启新会话。</li>
+          <li>处理完上一张之后，才能在当前窗口报新问题。</li>
+          <li>未处理的确认单保留 24 小时；过期后描述和图片清除，需要重新说明问题。</li>
+        </ul>
+        <div class="sample">⚠️ 还有一张未提交的确认单
+
+上一张
+💬 电脑死机
+📍 智园
+
+请先处理上一张，才能报新问题。
+
+请回复
+1. 确认提交上一张
+2. 取消上一张</div>
+      </section>
+
+      <section id="after">
+        <h2>8. 提交之后</h2>
+        <p>只有看到「已提交到 OA」并且带有<b>数字工单号</b>，才算真正进了 OA。处理人是对应系统的接口人。</p>
+        <div class="sample">✅ 已提交到 OA
+
+💬 问题：电脑蓝屏
+📍 地点：智园
+🎫 工单号：1504371
+👤 处理人：郑鹏程</div>
+        <div class="callout warn">现网<b>不支持按 OA 工单号查询处理进度</b>。问「1504371 到哪了」时，小A只能告诉你最近提交过哪些单，看不到流程节点。</div>
+        <p>之后的处理、流转、关单都在 OA 里完成。小A不承诺修复时限，也不会声称已经修好。</p>
+      </section>
+
+      <section id="faq">
+        <h2>9. 常见问题</h2>
+        <table>
+          <thead>
+            <tr><th>问题</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>要不要报工号、姓名、部门？</td>
+              <td>不用。系统按企微身份自动对应申请人。自报工号不能代替。</td>
+            </tr>
+            <tr>
+              <td>一次说了好几个系统？</td>
+              <td>请先说这次主要是哪一个。小A不会猜主系统。</td>
+            </tr>
+            <tr>
+              <td>为什么还在问园区？</td>
+              <td>上一张已取消或已提交后，新工单要重新说明地点，不会沿用历史选择。</td>
+            </tr>
+            <tr>
+              <td>群里发了它没理？</td>
+              <td>群聊必须直接 @小A。群聊、单聊都支持图片和语音输入。内容描述暂时不支持附件。</td>
+            </tr>
+            <tr>
+              <td>发了 Word / PDF，为什么没进描述？</td>
+              <td class="no">内容描述暂时不支持附件。请改用文字、图片或语音说明问题。群聊、单聊都可以发图片和语音。</td>
+            </tr>
+            <tr>
+              <td>回了「好的」怎么没提交？</td>
+              <td>这不是确认口令。请回 <b>1</b> 或「确认提交」。</td>
+            </tr>
+            <tr>
+              <td>想查旧单进度？</td>
+              <td>可以直接问「我的工单怎么样了」。能看到待确认单和最近已提交的工单号，不能按号查节点。</td>
+            </tr>
+            <tr>
+              <td>单聊会话太长了怎么办？</td>
+              <td>输入 <b>/new</b> 可以开启新会话。</td>
+            </tr>
+            <tr>
+              <td>人事 / 报销能不能找它？</td>
+              <td class="no">不能。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="contact">
+        <h2>10. 联系人、联系方式、问题记录</h2>
+        <p>提交成功后，处理人写在「已提交到 OA」卡片上。需要留底或转给同事时，按下面三项记下。表里是示例，请换成当次真实内容。自己的工号和手机号不用写。</p>
+        <table>
+          <thead>
+            <tr><th>项目</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>联系人</td>
+              <td>郑鹏程（以成功卡上的处理人为准）</td>
+            </tr>
+            <tr>
+              <td>联系方式</td>
+              <td>企业微信联系该处理人</td>
+            </tr>
+            <tr>
+              <td>问题记录</td>
+              <td>2026-09-24，智园电脑蓝屏，已重启两次仍复现。工单号 1504371。截图已在单聊提交。</td>
+            </tr>
+          </tbody>
+        </table>
+        <h3>可直接照抄的示例</h3>
+        <div class="sample">联系人：郑鹏程
+联系方式：企业微信
+问题记录：2026-09-24，智园电脑蓝屏，已重启两次仍复现。工单号 1504371。截图已在单聊提交。</div>
+      </section>
+
+      <footer>
+       小A使用说明书 · 口径对齐现网确认卡与两阶段提交 · 群聊、单聊支持图片和语音 · 内容描述暂时不支持附件 · 浏览器直接打开即可
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
