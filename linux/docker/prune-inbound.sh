@@ -4,7 +4,7 @@ set -eu
 # 宿主机 cron 用：清 ~/xa 布局下满 24 小时的 inbound 原件。
 # 对应 compose 卷：./config → /home/node/.openclaw ，./workspace → .../workspace
 # 因此这里是 $HOME/xa/config/media/inbound 与 $HOME/xa/workspace/media/inbound
-# （不是容器内路径）。写入 crontab 见运维手册 10.4 / 10.4.1。
+# （不是容器内路径）。写入 crontab 见运维手册第 7 节。
 
 LOG="${HOME}/xa/logs/inbound-prune.log"
 LOCK="${HOME}/xa/logs/inbound-prune.lock"

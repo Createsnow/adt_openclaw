@@ -20,7 +20,7 @@
 
 **建单 Header `userid` 必须是申请人。** 用接口账号的话，单据会落在接口账号名下，即使 `xqsqr` 填了员工。管理员还要确认该应用能以员工身份创建流程 602（`isVerifyPer=1`）。
 
-接口账号人员 id 不知道时，用该账号工号调 `getHrmUserInfoWithPage` 自查（见 Ecology 文档第四步），只抄 `data.dataList[].id`。不要把 appid、工号、`wo…` 写进 `oa_api_user_id.txt`。
+接口账号人员 id 不知道时，用该账号工号调 `getHrmUserInfoWithPage` 自查（见 Ecology 文档第 4 节），只抄 `data.dataList[].id`。不要把 appid、工号、`wo…` 写进 `oa_api_user_id.txt`。
 
 AGENTS.md 里的「建议责任人」是给员工看的姓名，不是身份映射；OA 处理人 id 在 `systems.json`。
 

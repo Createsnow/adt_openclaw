@@ -144,7 +144,7 @@ docker run --rm --entrypoint ls xa-gateway-oa:2026.9.2 /opt/xa/oa-workflow-bridg
 
 ## 6. 写配置
 
-**`~/xa/oa-bridge-config.json`**：填 `mysql.host` / `user` / `database`、`appId`、`publicKeySpkiBase64`；不写密码。初装 `active: false`，`isnextflow: "0"`。字段见 [OA 接入手册](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) 5.2。
+**`~/xa/oa-bridge-config.json`**：填 `mysql.host` / `user` / `database`、`appId`、`publicKeySpkiBase64`；不写密码。初装 `active: false`，`isnextflow: "0"`。字段见 [OA 接入手册](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) 第 4 节。
 
 **`~/xa/config/openclaw.json`**：用仓库样例，但先去掉 `channels` 和 `bindings`（企微插件还没装，写了会 `unknown channel id: wecom`，容器反复重启）：
 
@@ -185,7 +185,7 @@ curl -sS http://127.0.0.1:18789/healthz   # 含 "ok":true
 
 不应有：`Invalid config`、`Unknown model`、`MySQL init failed`、`Cannot find package 'mysql2'`、`plugin path not found`。
 
-MySQL 上 `SHOW TABLES FROM xa_oa;` 应有 `oa_identity` / `oa_inbox` / `oa_ticket`。再跑 OA 只读预检（[OA 接入手册](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) 8.2）。
+MySQL 上 `SHOW TABLES FROM xa_oa;` 应有 `oa_identity` / `oa_inbox` / `oa_ticket`。再跑 OA 只读预检（[OA 接入手册](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) 7.2）。
 
 `docker exec` 不跑 entrypoint，CLI 报 `missing env var` 不影响主进程。需要时用 `-e` 带上变量：
 
