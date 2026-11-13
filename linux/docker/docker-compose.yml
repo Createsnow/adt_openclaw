@@ -1,6 +1,7 @@
 services:
   xa-gateway:
-    image: ghcr.io/openclaw/openclaw:2026.9.2
+    # 自建镜像：官方 OpenClaw 2026.9.2 + OA 桥接插件与依赖，构建见 docker/Dockerfile
+    image: xa-gateway-oa:2026.9.2
     container_name: xa-gateway
     user: "1000:1000"
     restart: unless-stopped
@@ -32,6 +33,8 @@ services:
       - ./workspace:/home/node/.openclaw/workspace
       - ./extensions:/home/node/.openclaw/extensions
       - ./entrypoint.sh:/entrypoint.sh:ro
+      # OA 桥接现网配置（appId、公钥、MySQL 主机等，不含密码）
+      - ./oa-bridge-config.json:/opt/xa/oa-workflow-bridge/bridge-config.json:ro
     # 只走本机 / SSH 隧道。改 ports 后必须 down && up，只 restart 不够。
     ports:
       - "127.0.0.1:18789:18789"

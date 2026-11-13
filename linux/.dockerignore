@@ -1,0 +1,6 @@
+# 构建上下文只需要 OA 桥接插件源码
+*
+!OA_tool/oa-workflow-bridge/**
+OA_tool/oa-workflow-bridge/node_modules
+OA_tool/oa-workflow-bridge/tests
+OA_tool/oa-workflow-bridge/bridge-config.json

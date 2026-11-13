@@ -47,3 +47,15 @@ test("兜底系统「其他」在三类工单里都允许，且 AGENTS.md 写明
   }
   assert.match(markdown, /未命中兜底/);
 });
+
+test("AGENTS.md 系统表的处理人姓名与 systems.json 的 names 一致", async () => {
+  const markdown = await readFile(AGENTS_URL, "utf8");
+  const { names } = await loadSystems();
+  const table = markdown.slice(markdown.indexOf("### 系统 → 建议责任人"));
+  for (const line of table.split(/\n/).slice(1)) {
+    if (/^## /.test(line)) break;
+    const cells = line.split("|").map((cell) => cell.trim()).filter(Boolean);
+    if (cells.length < 2 || cells[0] === "所属系统" || /^-+$/.test(cells[0].replace(/\s/g, ""))) continue;
+    assert.equal(names.get(cells[0]), cells[1], `${cells[0]} 处理人不一致`);
+  }
+});

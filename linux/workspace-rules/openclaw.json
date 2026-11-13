@@ -151,7 +151,7 @@
     ],
     "load": {
       "paths": [
-        "/home/node/.openclaw/extensions/oa-workflow-bridge"
+        "/opt/xa/oa-workflow-bridge"
       ]
     },
     "entries": {
