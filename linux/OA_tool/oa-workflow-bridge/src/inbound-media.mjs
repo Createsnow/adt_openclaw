@@ -1,21 +1,13 @@
 import { statSync } from "node:fs";
 import path from "node:path";
 
-const inboundBySession = new Map();
-const stagedPathsBySession = new Map();
 /**
- * 会话缓冲只是 hook 到 attach / prepare 之间的第一跳。留太久会把上一张单里员工发了又放弃的
- * 图片带进下一张单，所以超过这个时长的条目直接丢弃；真正要留存的附件已经落到会话 inbox。
- * 30 分钟对齐 OpenClaw 空闲新会话与 inboxTtlMinutes。
+ * 只负责从 hook 事件 / 工具 ctx 里找出本轮企微 inbound 附件的本地路径，并算去重键。
+ * 附件一经发现就由 inbox.mjs 落到库里的 inbox（不在进程内缓冲）。
  */
-const INBOUND_BUFFER_TTL_MS = 30 * 60 * 1000;
 const MEDIA_ATTACHED_RE = /\[media attached:\s*([^\]]+)\]/gi;
 const INBOUND_PATH_RE = /(?:^|[\s"'`=])((?:[A-Za-z]:)?[\\/][^\s"'`\]]+?[\\/]media[\\/]+inbound[\\/]+[^\s"'`\]]+)/g;
 const MEDIA_URI_RE = /^media:\/\/inbound\/(.+)$/i;
-
-function sessionKeyOf(value) {
-  return String(value || "").trim();
-}
 
 function firstNonEmpty(...values) {
   for (const value of values) {
@@ -25,7 +17,11 @@ function firstNonEmpty(...values) {
   return "";
 }
 
-/** 通道 inbound 常用 SenderId / from.userid，工具 ctx 才保证有 requesterSenderId。 */
+/**
+ * 通道 inbound 常用 SenderId / from.userid，工具 ctx 才保证有 requesterSenderId。
+ * 单聊 hook 有时只有 sessionKey（`…:wecom:direct:<发送人小写>`），此时从键尾取发送人；
+ * 身份码按小写算，所以与工具 ctx 的发送人对得上。群聊键不含发送人，取不到就不收。
+ */
 export function senderIdOf(source) {
   if (!source || typeof source !== "object") return "";
   const from = source.from;
@@ -34,12 +30,14 @@ export function senderIdOf(source) {
     : (from && typeof from === "object"
       ? firstNonEmpty(from.userid, from.userId, from.UserId, from.id, from.senderId, from.SenderId)
       : "");
+  const direct = /:direct:([^:]+)$/i.exec(firstNonEmpty(source.sessionKey, source.SessionKey));
   return firstNonEmpty(
     source.requesterSenderId,
     source.SenderId,
     source.senderId,
     source.senderID,
     fromId,
+    direct?.[1],
   );
 }
 
@@ -66,20 +64,6 @@ export function mediaSourceFrom(...sources) {
     if (sessionKey && !merged.sessionKey) merged.sessionKey = sessionKey;
   }
   return merged;
-}
-
-function conversationOf(source) {
-  return firstNonEmpty(sessionIdOf(source), sessionKeyFieldOf(source));
-}
-
-function senderEmbeddedInSessionKey(sender, sessionKey) {
-  if (!sender || !sessionKey) return false;
-  return sessionKey.toLowerCase().includes(sender.toLowerCase());
-}
-
-function pushScopeKey(keys, value) {
-  const key = sessionKeyOf(value);
-  if (key && !keys.includes(key)) keys.push(key);
 }
 
 function isRemoteUrl(value) {
@@ -389,227 +373,13 @@ export function mergeAttachmentLists(...lists) {
   return toAttachmentList(collected);
 }
 
-export function rememberInboundMedia(sessionKey, attachments, { messageId, restoredFromCancel } = {}) {
-  const key = sessionKeyOf(sessionKey);
-  if (!key) return 0;
-  const incoming = filterUnstaged(key, mergeAttachmentLists(attachments));
-  peekInboundMedia(key);
-  if (!incoming.length) return peekInboundMedia(key).length;
-  const current = inboundBySession.get(key) || [];
-  const retained = messageId ? current.filter((item) => item.messageId !== messageId) : current;
-  const next = mergeAttachmentLists(retained, incoming).slice(-10).map((item) => {
-    const previous = retained.find((candidate) => candidate.localPath === item.localPath);
-    const fromIncoming = incoming.some((candidate) => candidate.localPath === item.localPath);
-    return {
-      ...item,
-      messageId: previous?.messageId || messageId,
-      rememberedAt: previous?.rememberedAt || Date.now(),
-      restoredFromCancel: restoredFromCancel
-        ? true
-        : (fromIncoming ? false : Boolean(previous?.restoredFromCancel)),
-    };
-  });
-  inboundBySession.set(key, next);
-  return next.length;
-}
-
-export function rememberInboundMediaFor(source, attachments, options) {
-  let count = 0;
-  for (const key of mediaScopeCandidates(source)) {
-    count = Math.max(count, rememberInboundMedia(key, attachments, options));
-  }
-  return count;
-}
-
-export function peekInboundMedia(sessionKey, now = Date.now()) {
-  const key = sessionKeyOf(sessionKey);
-  const items = inboundBySession.get(key) || [];
-  const fresh = items.filter((item) => now - Number(item.rememberedAt || 0) < INBOUND_BUFFER_TTL_MS);
-  if (key && fresh.length !== items.length) {
-    if (fresh.length) inboundBySession.set(key, fresh);
-    else inboundBySession.delete(key);
-  }
-  return toAttachmentList(fresh);
-}
-
-export function consumeInboundMedia(sessionKey) {
-  const key = sessionKeyOf(sessionKey);
-  const items = peekInboundMedia(key);
-  if (key) inboundBySession.delete(key);
-  return items;
-}
-
-export function peekInboundMediaFor(source, now = Date.now()) {
-  return mergeAttachmentLists(
-    ...mediaScopeCandidates(source).map((key) => peekInboundMedia(key, now)),
-  );
-}
-
-export function consumeInboundMediaFor(source) {
-  const collected = [];
-  for (const key of mediaScopeCandidates(source)) {
-    collected.push(...consumeInboundMedia(key));
-  }
-  return mergeAttachmentLists(collected);
-}
-
-export function dropCancelRestoredInboundFor(source, now = Date.now()) {
-  let dropped = 0;
-  for (const key of mediaScopeCandidates(source)) {
-    dropped += dropCancelRestoredInbound(key, now);
-  }
-  return dropped;
-}
-
-export function rememberStagedPathsFor(source, attachments, options) {
-  for (const key of mediaScopeCandidates(source)) {
-    rememberStagedPaths(key, attachments, options);
-  }
-}
-
-export function forgetStagedPathsFor(source, attachments) {
-  for (const key of mediaScopeCandidates(source)) {
-    forgetStagedPaths(key, attachments);
-  }
-}
-
-export function clearInboundMediaFor(source) {
-  if (!source) {
-    clearInboundMedia();
-    return;
-  }
-  for (const key of mediaScopeCandidates(source)) {
-    clearInboundMedia(key);
-  }
-}
-
-export function rememberStagedPaths(sessionKey, attachments, { merge = false } = {}) {
-  const key = sessionKeyOf(sessionKey);
-  if (!key) return;
-  const next = merge ? new Set(stagedPathsBySession.get(key) || []) : new Set();
-  for (const item of attachments || []) {
-    const localPath = asLocalPath(item);
-    if (!localPath) continue;
-    for (const identity of inboundIdentityKeys(localPath, asFileName(item))) next.add(identity);
-  }
-  stagedPathsBySession.set(key, next);
-}
-
-/**
- * 明确取消后的下一轮用户消息到来时调用：丢掉 cancel 回灌的旧单附件，
- * 本轮新发的图片 / 文件不受影响。同轮「cancel 再 prepare」的改稿不会走到这里。
- */
-export function dropCancelRestoredInbound(sessionKey, now = Date.now()) {
-  const key = sessionKeyOf(sessionKey);
-  if (!key) return 0;
-  peekInboundMedia(key, now);
-  const items = inboundBySession.get(key) || [];
-  const kept = items.filter((item) => !item.restoredFromCancel);
-  if (kept.length === items.length) return 0;
-  if (kept.length) inboundBySession.set(key, kept);
-  else inboundBySession.delete(key);
-  return items.length - kept.length;
-}
-
-/**
- * 撤回「已随单暂存」标记。`cancel` 之后这些附件的 staging 副本已被删除，
- * 必须让它们重新可被 `rememberInboundMedia` 收下，同轮改稿后的新单才不会少附件。
- */
-export function forgetStagedPaths(sessionKey, attachments) {
-  const key = sessionKeyOf(sessionKey);
-  const staged = key ? stagedPathsBySession.get(key) : null;
-  if (!staged) return;
-  for (const item of attachments || []) {
-    const localPath = asLocalPath(item);
-    if (!localPath) continue;
-    for (const identity of inboundIdentityKeys(localPath, asFileName(item))) staged.delete(identity);
-  }
-  if (staged.size) stagedPathsBySession.set(key, staged);
-  else stagedPathsBySession.delete(key);
-}
-
 export function attachmentIdentityKeys(localPath, fileName) {
   const resolved = asLocalPath({ localPath, fileName }) || String(localPath || "").trim();
   if (!resolved) return [];
   return inboundIdentityKeys(resolved, fileName);
 }
 
-function isAlreadyStaged(staged, item) {
-  if (!staged.size) return false;
-  const localPath = asLocalPath(item) || item?.localPath;
-  if (!localPath) return false;
-  return inboundIdentityKeys(localPath, asFileName(item)).some((identity) => staged.has(identity));
-}
-
-function filterUnstaged(sessionKey, attachments) {
-  const staged = stagedPathsBySession.get(sessionKeyOf(sessionKey)) || new Set();
-  if (!staged.size) return attachments;
-  return attachments.filter((item) => !isAlreadyStaged(staged, item));
-}
-
-function filterUnstagedFor(source, attachments) {
-  const staged = new Set();
-  for (const key of mediaScopeCandidates(source)) {
-    for (const item of stagedPathsBySession.get(key) || []) staged.add(item);
-  }
-  if (!staged.size) return attachments;
-  return attachments.filter((item) => !isAlreadyStaged(staged, item));
-}
-
-export function clearInboundMedia(sessionKey) {
-  const key = sessionKeyOf(sessionKey);
-  if (key) {
-    inboundBySession.delete(key);
-    stagedPathsBySession.delete(key);
-  } else {
-    inboundBySession.clear();
-    stagedPathsBySession.clear();
-  }
-}
-
-export function collectPrepareAttachments(ctx, paramsAttachments, stateDir) {
-  return mergeAttachmentLists(
-    collectCtxMedia(ctx, stateDir),
-    remapResolved(peekInboundMediaFor(ctx), stateDir),
-    remapResolved(paramsAttachments, stateDir),
-  );
-}
-
-export function collectSubmitAttachments(ctx, paramsAttachments, stateDir) {
-  return filterUnstagedFor(
-    ctx,
-    mergeAttachmentLists(
-      collectCtxMedia(ctx, stateDir),
-      remapResolved(peekInboundMediaFor(ctx), stateDir),
-      remapResolved(paramsAttachments, stateDir),
-    ),
-  );
-}
-
-/**
- * 附件缓冲按「提交人 + OpenClaw 会话」隔离。
- * 优先 sessionId：`/new` 或自动新会话后旧图不会串进新对话；
- * 提交人必须参与，否则群聊同一 sessionKey 会把同事的图并进自己的单。
- */
-export function mediaScope(source) {
-  const sender = senderIdOf(source);
-  const conversation = conversationOf(source);
-  if (sender && conversation) return `${sender}::${conversation}`;
-  return sessionKeyOf(conversation);
-}
-
-/**
- * hook 往往只有 sessionKey，工具 ctx 还有 requesterSenderId + sessionId。
- * 读取时把这些键都试一遍；裸 sessionKey 仅当其中已包含发送人（单聊）才作为候选，避免群聊串图。
- */
-function mediaScopeCandidates(source) {
-  const sender = senderIdOf(source);
-  const sessionId = sessionIdOf(source);
-  const sessionKey = sessionKeyFieldOf(source);
-  const keys = [];
-  pushScopeKey(keys, mediaScope(source));
-  if (sender && sessionId) pushScopeKey(keys, `${sender}::${sessionId}`);
-  if (sender && sessionKey) pushScopeKey(keys, `${sender}::${sessionKey}`);
-  if (senderEmbeddedInSessionKey(sender, sessionKey)) pushScopeKey(keys, sessionKey);
-  return keys;
+/** 工具调用时本轮能看到的 inbound：工具 ctx 里的媒体 + 模型显式传的 attachments。 */
+export function collectToolMedia(ctx, paramsAttachments, stateDir) {
+  return mergeAttachmentLists(collectCtxMedia(ctx, stateDir), remapResolved(paramsAttachments, stateDir));
 }

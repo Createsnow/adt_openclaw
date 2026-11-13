@@ -4,15 +4,8 @@ import { fileURLToPath } from "node:url";
 import { loadBridgeConfig } from "./src/config.mjs";
 import { createMysqlDb, ensureSchema } from "./src/db.mjs";
 import { createIdentityResolver } from "./src/identity/resolve.mjs";
-import {
-  clearInboundMedia,
-  dropCancelRestoredInboundFor,
-  extractHookMedia,
-  isSessionResetCommand,
-  mediaScope,
-  mediaSourceFrom,
-  rememberInboundMediaFor,
-} from "./src/inbound-media.mjs";
+import { captureInbound } from "./src/inbox.mjs";
+import { extractHookMedia, isSessionResetCommand, mediaSourceFrom, senderIdOf } from "./src/inbound-media.mjs";
 import { maskFileNames } from "./src/log-redact.mjs";
 import { cleanupExpired, createStore, discardUnpreparedInbox } from "./src/store.mjs";
 import { createOAWorkflowToolFactory } from "./src/tool.mjs";
@@ -56,7 +49,6 @@ function getStore() {
 }
 
 async function shutdown() {
-  clearInboundMedia();
   if (sweepTimer) clearInterval(sweepTimer);
   sweepTimer = null;
   const db = activeDb;
@@ -104,30 +96,27 @@ const plugin = {
           .then((store) => discardUnpreparedInbox({ store, stateDir, source, logger: api.logger }))
           .catch(warn(`${label} inbox wipe failed`));
       };
-      const rememberFromHook = (label) => (event, ctx) => {
+      // 附件一出现就落进库里的 inbox（拷进本机 staging），不在进程内缓冲。
+      const captureFromHook = (label) => (event, ctx) => {
         const source = mediaSourceFrom(ctx, event);
-        if (label === "message_received" && isSessionResetCommand(event, ctx)) discardInbox(source, "/new");
+        if (label === "message_received" && isSessionResetCommand(event, ctx)) {
+          discardInbox(source, "/new");
+          return;
+        }
         const attachments = extractHookMedia(event, ctx, stateDir);
-        if (!mediaScope(source)) {
-          api.logger.info(`${LOG} ${label}: no sessionKey extracted=${attachments.length}`);
+        if (!attachments.length) return;
+        if (!senderIdOf(source)) {
+          api.logger.info(`${LOG} ${label}: media without sender, left to tool ctx (${attachments.length})`);
           return;
         }
-        if (label === "message_received") {
-          const dropped = dropCancelRestoredInboundFor(source);
-          if (dropped) api.logger.info(`${LOG} dropped ${dropped} cancel-restored inbound attachment(s) on new message`);
-        }
-        if (!attachments.length) {
-          const mediaFacts = Array.isArray(event?.media) ? event.media.length : 0;
-          const promptMedia = /\[media attached:/i.test(String(event?.prompt || ctx?.prompt || ""));
-          api.logger.info(`${LOG} ${label}: no local media pending=${Boolean(event?.mediaStagingPending)} mediaFacts=${mediaFacts} promptMediaAttached=${promptMedia}`);
-          return;
-        }
-        rememberInboundMediaFor(source, attachments, { messageId: event?.messageId || ctx?.messageId });
-        api.logger.info(`${LOG} remembered inbound attachment(s) via ${label} (hook): ${maskFileNames(attachments)}`);
+        void Promise.all([getStore(), loadBridgeConfig()])
+          .then(([store, config]) => captureInbound({ store, stateDir, config, source, attachments }))
+          .then(() => api.logger.info(`${LOG} captured inbound via ${label}: ${maskFileNames(attachments)}`))
+          .catch(warn(`${label} capture failed`));
       };
-      api.on("message_received", rememberFromHook("message_received"));
-      api.on("agent_turn_prepare", rememberFromHook("agent_turn_prepare"));
-      api.on("before_prompt_build", rememberFromHook("before_prompt_build"));
+      api.on("message_received", captureFromHook("message_received"));
+      api.on("agent_turn_prepare", captureFromHook("agent_turn_prepare"));
+      api.on("before_prompt_build", captureFromHook("before_prompt_build"));
       api.on("session_end", (event, ctx) => discardInbox(mediaSourceFrom(ctx, event), "session_end"));
       api.on("gateway_stop", shutdown);
     }

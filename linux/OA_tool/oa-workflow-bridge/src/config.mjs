@@ -111,8 +111,8 @@ export function resolveInboxTtlMs(config) {
 }
 
 /**
- * systems.json：所属系统 → OA 下拉选项 ID、处理人（clry）、允许的工单类型。
- * 返回三张查找表：options（名→ID）、handlers（名→处理人 ID 串）、typeSystems（类型→允许系统集合）。
+ * systems.json：所属系统 → OA 下拉选项 ID、处理人 id（clry）、处理人姓名（员工可见）、允许的工单类型。
+ * 返回查找表：options（名→ID）、handlers（名→处理人 ID 串）、names（名→姓名）、typeSystems（类型→允许系统集合）。
  */
 export function parseSystems(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -120,6 +120,7 @@ export function parseSystems(raw) {
   }
   const options = new Map();
   const handlers = new Map();
+  const names = new Map();
   const typeSystems = new Map(TICKET_TYPE_NAMES.map((type) => [type, new Set()]));
   const optionIds = new Set();
   for (const [rawName, entry] of Object.entries(raw)) {
@@ -139,9 +140,10 @@ export function parseSystems(raw) {
     options.set(name, optionId);
     optionIds.add(optionId);
     handlers.set(name, handlerIds);
+    names.set(name, String(entry?.names ?? "").trim());
     for (const type of types) typeSystems.get(type).add(name);
   }
-  return { options, handlers, typeSystems };
+  return { options, handlers, names, typeSystems };
 }
 
 export async function loadSystems() {

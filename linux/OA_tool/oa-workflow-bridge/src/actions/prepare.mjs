@@ -1,48 +1,43 @@
 import { randomBytes } from "node:crypto";
-import { adoptStagedFiles, stageAttachments, stagedBytes, summarizeStaged } from "../attachments.mjs";
-import { attachmentIdentityKeys, collectPrepareAttachments, consumeInboundMediaFor, rememberStagedPathsFor } from "../inbound-media.mjs";
+import { limitExceeded, MAX_STAGED_ATTACHMENTS, moveStagedFiles, stagedBytes, summarizeStaged } from "../attachments.mjs";
+import { moveInboxToTicket } from "../inbox.mjs";
+import { hintZhFor } from "../hints.mjs";
 import { maskFileNames } from "../log-redact.mjs";
 import { allocateExternalTicketId, normalizeDraft } from "../mapping.mjs";
 import { OAClientError } from "../oa-client.mjs";
+import { confirmCard, INBOX_EXPIRED, reconcileCard, replacedOtherPrefix } from "../reply.mjs";
 import {
-  dropInbox,
   expireTicket,
-  getInbox,
+  getActiveTicket,
   getLatestTicketByExternalId,
-  inboxDirName,
   insertTicket,
   removeStagingDirectory,
+  updateTicket,
   withStateLock,
 } from "../store.mjs";
-import {
-  alreadyPendingPayload,
-  conflictView,
-  dropRotatedInbox,
-  fail,
-  ignoreErrors,
-  isExpired,
-  maybeCleanup,
-  personConflict,
-} from "./common.mjs";
+import { captureToolMedia, fail, handlerNamesOf, ignoreErrors, isExpired, isSameSession, maybeCleanup } from "./common.mjs";
+import { submitConfirmed } from "./submit.mjs";
 
 function newConfirmationId() {
   return `OA-${Date.now().toString(36).toUpperCase()}-${randomBytes(8).toString("hex").toUpperCase()}`;
 }
 
-/** 同一内部幂等号：已提交、提交中 / 待对账、或仍在有效期的待确认都不能再 prepare。 */
-async function assertExternalIdReusable(store, externalTicketId, trust, config) {
+/** 同一内部幂等号已提交、或在提交中 / 待对账，不能再 prepare。仍在待确认的会被新单替换。 */
+async function assertExternalIdReusable(store, externalTicketId) {
   const ticket = await getLatestTicketByExternalId(store, externalTicketId);
-  if (!ticket) return;
-  if (ticket.status === "submitted") fail("ALREADY_SUBMITTED", "This ticket was already submitted to OA");
-  if (ticket.status === "submitting" || ticket.status === "unknown") {
+  if (ticket?.status === "submitted") fail("ALREADY_SUBMITTED", "This ticket was already submitted to OA");
+  if (ticket?.status === "submitting" || ticket?.status === "unknown") {
     fail("RECONCILIATION_REQUIRED", "This ticket requires OA reconciliation before retry");
   }
-  if (ticket.status === "awaiting_confirmation" && !isExpired(ticket)) {
-    // 同一条企微消息重复 prepare 会算出同一个内部幂等号。回执必须带 confirmationId / sameSession，
-    // 否则模型既出不了确认卡也出不了拦截卡。
-    fail("ALREADY_PENDING", "This ticket already has a pending OA confirmation",
-      alreadyPendingPayload(conflictView(ticket, trust, null), config));
-  }
+}
+
+function reconcilePayload(ticket) {
+  return {
+    ok: false,
+    code: "RECONCILIATION_REQUIRED",
+    confirmationId: ticket.confirmationId,
+    replyZh: reconcileCard({ requestId: ticket.requestId, handlerNames: handlerNamesOf(ticket) }),
+  };
 }
 
 function identityAdapterOn(config) {
@@ -64,24 +59,24 @@ async function resolveOaRequesterId({ store, config, ctx, deps }) {
   }
 }
 
-function isDuplicateKey(error) {
-  return error?.code === "ER_DUP_ENTRY" || /UNIQUE constraint failed/i.test(String(error?.message || ""));
-}
-
-export async function prepare({ store, stateDir, config, ctx, trust, params, logger, deps }) {
+/**
+ * prepare：生成一张待确认单。
+ * - 此人已有待确认单：作废它，由新单替换。同一对话里是改稿（旧单附件带到新单）；
+ *   另一个对话里是报新问题（旧单附件随旧单清掉）。提交中 / 待对账的单仍挡住。
+ * - 本轮与 inbox 里的附件全部认领进新单。
+ * - `submitNow`：员工原话已要求直接提交，建单后立刻提交，回执是提交结果。
+ */
+export async function prepare(env) {
+  const { store, stateDir, config, ctx, trust, params, logger, deps } = env;
   const now = Date.now();
   const draft = normalizeDraft({
     ...(params.draft || {}),
     externalTicketId: allocateExternalTicketId(ctx, now),
   }, await deps.loadSystems());
-  // 先拦冲突再查身份：被拦下的员工不必打企微 / 人事接口。
-  await assertExternalIdReusable(store, draft.externalTicketId, trust, config);
-  const conflict = await personConflict(store, trust, draft.externalTicketId);
-  if (conflict?.expired) {
-    await expireTicket(store, stateDir, conflict.expired);
-  } else if (conflict) {
-    return alreadyPendingPayload(conflict, config);
-  }
+  await assertExternalIdReusable(store, draft.externalTicketId);
+  // 先拦对账中的单再查身份：被拦下的员工不必打企微 / 人事接口。
+  const blocking = await getActiveTicket(store, trust.identity);
+  if (blocking && !isExpired(blocking) && blocking.status !== "awaiting_confirmation") return reconcilePayload(blocking);
 
   const oaRequesterId = await resolveOaRequesterId({ store, config, ctx, deps });
   if (!oaRequesterId) {
@@ -94,80 +89,67 @@ export async function prepare({ store, stateDir, config, ctx, trust, params, log
 
   const confirmationId = newConfirmationId();
   const expiresAt = now + config.pendingTtlHours * 60 * 60 * 1000;
-  let staged;
+  let staged = [];
+  let replaced = null;
+  let expiredNotice = false;
   let committed = false;
-  // inbox 快照、adopt、写工单、清 inbox 必须同处一个临界区：attach 也持这把锁写同一个 inbox，
-  // 否则快照之后落进来的附件不会进本单，却会被收尾的清 inbox 删掉。
   try {
     await withStateLock(store, async () => {
-      await dropRotatedInbox(store, stateDir, trust);
-      const inbox = await getInbox(store, trust.identity, trust.session);
-      const inboxItems = Array.isArray(inbox?.items) ? inbox.items : [];
-      const bufferedKeys = new Set(inboxItems.flatMap((item) => attachmentIdentityKeys(item.sourcePath, item.fileName)));
-      const attachments = collectPrepareAttachments(ctx, params.attachments, stateDir)
-        .filter((item) => !attachmentIdentityKeys(item.localPath, item.fileName).some((key) => bufferedKeys.has(key)));
+      const { inbox, notices } = await captureToolMedia(env);
+      expiredNotice = notices.expired;
+      if (notices.rejected) throw limitExceeded();
+
+      let previous = await getActiveTicket(store, trust.identity);
+      if (previous && isExpired(previous)) {
+        await expireTicket(store, stateDir, previous);
+        previous = null;
+      }
+      if (previous && previous.status !== "awaiting_confirmation") {
+        fail("RECONCILIATION_REQUIRED", "This ticket requires OA reconciliation before retry");
+      }
+      const carry = previous && isSameSession(previous, trust) ? previous.staged : [];
+      // 先算上限再动任何东西：超限时旧单、inbox 都保持原样。
+      if (carry.length + inbox.items.length > MAX_STAGED_ATTACHMENTS
+        || stagedBytes(carry) + stagedBytes(inbox.items) > config.maxTotalAttachmentBytes) {
+        throw limitExceeded();
+      }
       logger?.info?.(
-        `[oa-workflow-bridge] prepare collecting ${inboxItems.length} buffered + ${attachments.length} inbound attachment(s): ${maskFileNames(attachments)}`,
+        `[oa-workflow-bridge] prepare carry=${carry.length} inbox=${inbox.items.length}: ${maskFileNames(inbox.items)}`,
       );
-      const adopted = await adoptStagedFiles({
-        stateDir,
-        fromDirName: inboxDirName(trust.identity, trust.session),
-        toDirName: confirmationId,
-        items: inboxItems,
-        config,
-      });
-      staged = [...adopted, ...await stageAttachments({
-        stateDir,
-        confirmationId,
-        attachments,
-        config,
-        startIndex: adopted.length,
-        existingBytes: stagedBytes(adopted),
-      })];
-      // 锁外的检查可能已过时（并发 prepare），锁内再核一次。
-      await assertExternalIdReusable(store, draft.externalTicketId, trust, config);
-      const lockedConflict = await personConflict(store, trust, draft.externalTicketId);
-      if (lockedConflict?.expired) {
-        await expireTicket(store, stateDir, lockedConflict.expired);
-      } else if (lockedConflict) {
-        fail("ALREADY_PENDING", "This sender already has a pending OA confirmation", alreadyPendingPayload(lockedConflict, config));
+      if (previous) {
+        staged = await moveStagedFiles(stateDir, previous.confirmationId, confirmationId, carry);
+        await updateTicket(store, previous.confirmationId, { status: "cancelled" });
+        await ignoreErrors(removeStagingDirectory(stateDir, previous.confirmationId));
+        replaced = {
+          summary: previous.draft?.summary,
+          sameSession: isSameSession(previous, trust),
+          sameMessage: previous.externalTicketId === draft.externalTicketId,
+        };
       }
-      try {
-        await insertTicket(store, {
-          confirmationId,
-          identity: trust.identity,
-          session: trust.session,
-          oaRequesterId,
-          draft,
-          staged,
-          expiresAt,
-        });
-      } catch (error) {
-        if (!isDuplicateKey(error)) throw error;
-        const raced = await personConflict(store, trust, null);
-        fail("ALREADY_PENDING", "This sender already has a pending OA confirmation",
-          raced && !raced.expired ? alreadyPendingPayload(raced, config) : null);
-      }
+      const adopted = await moveInboxToTicket({ store, stateDir, config, identity: trust.identity, inbox, confirmationId, staged });
+      staged = [...staged, ...adopted];
+      await insertTicket(store, { confirmationId, identity: trust.identity, session: trust.session, oaRequesterId, draft, staged, expiresAt });
       committed = true;
-      rememberStagedPathsFor(ctx, [
-        ...attachments,
-        ...inboxItems.filter((item) => item.sourcePath).map((item) => ({ localPath: item.sourcePath })),
-      ]);
-      if (attachments.length) consumeInboundMediaFor(ctx);
-      if (inboxItems.length) {
-        try {
-          await dropInbox(store, stateDir, trust.identity, trust.session);
-        } catch (cleanupError) {
-          logger?.warn?.(`[oa-workflow-bridge] ticket saved but inbox cleanup failed: ${cleanupError?.message || cleanupError}`);
-        }
-      }
     });
   } catch (error) {
     if (!committed) await ignoreErrors(removeStagingDirectory(stateDir, confirmationId));
     throw error;
   }
-  logger?.info?.(`[oa-workflow-bridge] prepare staged ${staged.length} attachment(s)`);
+  logger?.info?.(`[oa-workflow-bridge] prepare staged ${staged.length} attachment(s)${replaced ? " (replaced previous)" : ""}`);
   await maybeCleanup(store, stateDir, now);
+
+  const card = { summary: draft.summary, location: draft.location, ...summarizeStaged(staged) };
+  let prefix = "";
+  if (replaced && !replaced.sameMessage) {
+    prefix = replaced.sameSession ? "📝 已补充描述\n\n" : replacedOtherPrefix(replaced.summary);
+  }
+  const expiredLine = expiredNotice ? `${INBOX_EXPIRED}\n\n` : "";
+
+  if (params.submitNow) {
+    const submitted = await submitConfirmed({ ...env, params: { action: "submit_confirmed", confirmationId } });
+    const otherPrefix = replaced && !replaced.sameSession && !replaced.sameMessage ? prefix : "";
+    return { ...submitted, replyZh: `${expiredLine}${otherPrefix}${submitted.replyZh || hintZhFor(submitted)}` };
+  }
   return {
     ok: true,
     code: "AWAITING_CONFIRMATION",
@@ -176,6 +158,7 @@ export async function prepare({ store, stateDir, config, ctx, trust, params, log
     retentionHours: config.pendingTtlHours,
     sameSession: true,
     location: draft.location || null,
+    replacedPrevious: Boolean(replaced && !replaced.sameMessage),
     summary: {
       externalTicketId: draft.externalTicketId,
       ticketType: draft.ticketType,
@@ -184,5 +167,6 @@ export async function prepare({ store, stateDir, config, ctx, trust, params, log
       problemSummary: draft.summary,
       ...summarizeStaged(staged),
     },
+    replyZh: `${expiredLine}${prefix}${confirmCard(card)}`,
   };
 }

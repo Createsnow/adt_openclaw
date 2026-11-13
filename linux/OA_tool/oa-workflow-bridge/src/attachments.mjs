@@ -1,7 +1,6 @@
-import { copyFile, mkdir, readFile, realpath, stat, unlink } from "node:fs/promises";
+import { copyFile, mkdir, readFile, realpath, rename, stat } from "node:fs/promises";
 import path from "node:path";
 import { embedImage } from "./image-embed.mjs";
-import { attachmentIdentityKeys } from "./inbound-media.mjs";
 import { maskFileName } from "./log-redact.mjs";
 import { isImageAttachment, looksLikeImageName } from "./media-kind.mjs";
 import { OAClientError } from "./oa-client.mjs";
@@ -41,128 +40,61 @@ async function resolveInboundRoots(stateDir) {
   return roots;
 }
 
-export async function stageAttachments({
-  stateDir,
-  confirmationId,
-  stageDirName,
-  attachments,
-  config,
-  startIndex = 0,
-  existingBytes = 0,
-}) {
-  if (!attachments?.length) return [];
-  if (!Array.isArray(attachments)) throw new Error("At most 10 attachments are allowed");
-  const inboundRoots = await resolveInboundRoots(stateDir);
-  if (!inboundRoots.length) return [];
-  const resolved = [];
-  const seen = new Set();
-  for (const item of attachments) {
-    try {
-      const source = await realpath(String(item?.localPath || ""));
-      if (!inboundRoots.some((root) => isWithin(source, root))) continue;
-      const info = await stat(source);
-      if (!info.isFile()) continue;
-      if (info.size <= 0 || info.size > config.maxAttachmentBytes) {
-        throw new OAClientError("Attachment exceeds the configured per-file limit", { code: "ATTACHMENT_LIMIT_EXCEEDED" });
-      }
-      const fileName = sanitizeFileName(item?.fileName || path.basename(source));
-      const identities = [`realpath:${source}`, ...attachmentIdentityKeys(source, fileName)];
-      if (identities.some((key) => seen.has(key))) continue;
-      for (const key of identities) seen.add(key);
-      resolved.push({
-        source,
-        info,
-        fileName,
-      });
-    } catch (error) {
-      if (error?.code === "ENOENT" || error?.code === "EINVAL") continue;
-      throw error;
-    }
-  }
-  if (!resolved.length) return [];
-  if (startIndex + resolved.length > MAX_STAGED_ATTACHMENTS) {
-    throw new OAClientError(`At most ${MAX_STAGED_ATTACHMENTS} attachments are allowed`, { code: "ATTACHMENT_LIMIT_EXCEEDED" });
-  }
-  const { stagingRoot } = stagingPaths(stateDir);
-  const stageDir = path.join(stagingRoot, stageDirName || confirmationId);
-  await mkdir(stageDir, { recursive: true });
-  const staged = [];
-  let totalBytes = existingBytes;
-  const copied = [];
+/** 校验并定位一个 inbound 文件：必须在 media/inbound 下（realpath），是普通文件。不合格返回 null。 */
+export async function resolveInboundFile(stateDir, item) {
+  const roots = await resolveInboundRoots(stateDir);
+  if (!roots.length) return null;
   try {
-    for (let index = 0; index < resolved.length; index += 1) {
-      const item = resolved[index];
-      totalBytes += item.info.size;
-      if (totalBytes > config.maxTotalAttachmentBytes) {
-        throw new OAClientError("Attachments exceed the configured total limit", { code: "ATTACHMENT_LIMIT_EXCEEDED" });
-      }
-      const storedName = `${String(startIndex + index + 1).padStart(2, "0")}-${item.fileName}`;
-      const destination = path.join(stageDir, storedName);
-      await copyFile(item.source, destination);
-      copied.push(destination);
-      // sourcePath 只在本机与工单记录内部使用：cancel 后要靠它把附件回灌进会话缓冲，
-      // 否则「确认前改稿 = cancel + prepare」会把上一轮已暂存的图片连同 staging 目录一起丢掉。
-      staged.push({ storedName, fileName: item.fileName, size: item.info.size, sourcePath: item.source });
-    }
+    const source = await realpath(String(item?.localPath || ""));
+    if (!roots.some((root) => isWithin(source, root))) return null;
+    const info = await stat(source);
+    if (!info.isFile() || info.size <= 0) return null;
+    return { source, size: info.size, fileName: sanitizeFileName(item?.fileName || path.basename(source)) };
   } catch (error) {
-    await Promise.all(copied.map((item) => unlink(item).catch(() => {})));
+    if (error?.code === "ENOENT" || error?.code === "EINVAL") return null;
     throw error;
   }
-  return staged;
+}
+
+function stagingDir(stateDir, dirName) {
+  return path.join(stagingPaths(stateDir).stagingRoot, path.basename(String(dirName)));
+}
+
+export function storedNameFor(index, fileName) {
+  return `${String(index + 1).padStart(2, "0")}-${fileName}`;
+}
+
+/** 把 inbound 原件拷进 staging 下的某个目录。 */
+export async function copyIntoStaging(stateDir, dirName, source, storedName) {
+  const dir = stagingDir(stateDir, dirName);
+  await mkdir(dir, { recursive: true });
+  await copyFile(source, path.join(dir, storedName));
 }
 
 /**
- * 把会话 inbox 目录里已落盘的附件搬进本张单的 staging 目录。
- * 源 inbound 文件此时可能已被通道清理，所以只能从 inbox 副本复制，不能回头去读 `media/inbound`。
+ * 把一批已落盘附件从一个 staging 目录搬到另一个（inbox → 工单、旧单 → 改稿后的新单），按目标序号重命名。
+ * 源文件已不在的跳过。返回目标侧的附件清单。
  */
-export async function adoptStagedFiles({
-  stateDir,
-  fromDirName,
-  toDirName,
-  items,
-  config,
-  startIndex = 0,
-  existingBytes = 0,
-}) {
+export async function moveStagedFiles(stateDir, fromDirName, toDirName, items, startIndex = 0) {
   if (!items?.length) return [];
-  if (startIndex + items.length > MAX_STAGED_ATTACHMENTS) {
-    throw new OAClientError(`At most ${MAX_STAGED_ATTACHMENTS} attachments are allowed`, { code: "ATTACHMENT_LIMIT_EXCEEDED" });
-  }
-  const { stagingRoot } = stagingPaths(stateDir);
-  const fromDir = path.join(stagingRoot, fromDirName);
-  const toDir = path.join(stagingRoot, toDirName);
+  const toDir = stagingDir(stateDir, toDirName);
   await mkdir(toDir, { recursive: true });
-  const staged = [];
-  const copied = [];
-  let totalBytes = existingBytes;
-  try {
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      const fileName = sanitizeFileName(item?.fileName);
-      const source = path.join(fromDir, path.basename(String(item?.storedName || "")));
-      let info;
-      try {
-        info = await stat(source);
-      } catch (error) {
-        if (error?.code === "ENOENT") continue;
-        throw error;
-      }
-      if (!info.isFile()) continue;
-      totalBytes += info.size;
-      if (totalBytes > config.maxTotalAttachmentBytes) {
-        throw new OAClientError("Attachments exceed the configured total limit", { code: "ATTACHMENT_LIMIT_EXCEEDED" });
-      }
-      const storedName = `${String(startIndex + staged.length + 1).padStart(2, "0")}-${fileName}`;
-      const destination = path.join(toDir, storedName);
-      await copyFile(source, destination);
-      copied.push(destination);
-      staged.push({ storedName, fileName, size: info.size, sourcePath: item?.sourcePath || "" });
+  const moved = [];
+  for (const item of items) {
+    const storedName = storedNameFor(startIndex + moved.length, sanitizeFileName(item.fileName));
+    try {
+      await rename(path.join(stagingDir(stateDir, fromDirName), path.basename(String(item.storedName))), path.join(toDir, storedName));
+    } catch (error) {
+      if (error?.code === "ENOENT") continue;
+      throw error;
     }
-  } catch (error) {
-    await Promise.all(copied.map((entry) => unlink(entry).catch(() => {})));
-    throw error;
+    moved.push({ storedName, fileName: item.fileName, size: item.size, sourcePath: item.sourcePath || "" });
   }
-  return staged;
+  return moved;
+}
+
+export function limitExceeded() {
+  return new OAClientError("Attachments exceed the configured limit", { code: "ATTACHMENT_LIMIT_EXCEEDED" });
 }
 
 /** 回执用的附件计数。这里只看文件名，真正的图片/文档分流在提交前按文件头判定。 */

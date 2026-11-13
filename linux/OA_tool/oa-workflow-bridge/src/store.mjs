@@ -2,8 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { ACTIVE_TICKET_STATUSES } from "./db.mjs";
-import { clearInboundMediaFor, senderIdOf } from "./inbound-media.mjs";
-import { identityCode, sessionCode } from "./trust.mjs";
+import { senderIdOf } from "./inbound-media.mjs";
+import { identityCode } from "./trust.mjs";
 
 /**
  * 工单状态、建单前 inbox、身份缓存都在 MySQL；图片 / 文档字节在本机 staging，不进库。
@@ -26,8 +26,10 @@ const RECENT_LIMIT = 20;
  * 并发的另一次 GC 不能把它当孤儿删掉，所以新目录一律先放过。
  */
 const STAGING_ORPHAN_GRACE_MS = 10 * 60 * 1000;
+/** 过期 inbox 保留多久等员工回来（之后定时回收直接删）。 */
+const INBOX_STALE_MS = 24 * 60 * 60 * 1000;
 const CONFIRMATION_DIR_RE = /^OA-[A-Z0-9-]{12,80}$/;
-const INBOX_DIR_RE = /^inbox-([0-9a-f]{24})-([0-9a-f]{24})$/;
+const INBOX_DIR_RE = /^inbox-([0-9a-f]{24})$/;
 
 export function isActiveTicket(ticket) {
   return Boolean(ticket && ACTIVE.has(ticket.status));
@@ -157,67 +159,65 @@ export async function updateTicket(store, confirmationId, { status, staged, requ
   return (await store.db.run(sql, params)) > 0;
 }
 
-// ---------- 建单前 inbox（每人一行，按 session 判断归属） ----------
+// ---------- inbox（每人一行：收到但还没进工单的附件） ----------
 
-export async function getInbox(store, identity, session) {
-  if (!identity || !session) return null;
+/**
+ * 读此人的 inbox。`expired` 表示已过 30 分钟未动；调用方决定是否清掉并提示员工。
+ * 结构：sessions（会话码列表）、items（已落盘附件）、seen（本会话见过的去重键）、
+ * rejected（超限未收的件数，待回执）、expiredNotice（上一批已过期，待提示）。
+ */
+export async function readInbox(store, identity) {
+  if (!identity) return null;
   const rows = await store.db.query(
-    "SELECT items_json, updated_at FROM oa_inbox WHERE sender_code = ? AND session_code = ? AND expires_at > ?",
-    [identity, session, store.now()],
+    "SELECT session_codes, state_json, expires_at FROM oa_inbox WHERE sender_code = ?",
+    [identity],
   );
   if (!rows[0]) return null;
+  const state = parseJson(rows[0].state_json, {});
   return {
-    items: parseJson(rows[0].items_json, []),
-    updatedAt: new Date(Number(rows[0].updated_at)).toISOString(),
+    sessions: parseJson(rows[0].session_codes, []),
+    items: Array.isArray(state.items) ? state.items : [],
+    seen: Array.isArray(state.seen) ? state.seen : [],
+    rejected: Number(state.rejected || 0),
+    expiredNotice: Boolean(state.expiredNotice),
+    expired: Number(rows[0].expires_at) <= store.now(),
   };
 }
 
-/** 该人当前 inbox 落在哪个会话（已过期的也算，方便换会话时把旧目录一起清掉）。 */
-export async function getInboxSession(store, identity) {
-  if (!identity) return "";
-  const rows = await store.db.query("SELECT session_code FROM oa_inbox WHERE sender_code = ?", [identity]);
-  return rows[0]?.session_code || "";
-}
-
-export async function setInbox(store, identity, session, items, ttlMs) {
+export async function writeInbox(store, identity, inbox, ttlMs) {
   const now = store.now();
+  const state = { items: inbox.items, seen: inbox.seen, rejected: inbox.rejected, expiredNotice: inbox.expiredNotice };
   await store.db.run(
-    "REPLACE INTO oa_inbox (sender_code, session_code, items_json, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-    [identity, session, JSON.stringify(items), now + Math.max(1000, Math.ceil(ttlMs)), now],
+    "REPLACE INTO oa_inbox (sender_code, session_codes, state_json, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    [identity, JSON.stringify(inbox.sessions), JSON.stringify(state), now + Math.max(1000, Math.ceil(ttlMs)), now],
   );
 }
 
-/** 删该人在这个会话的 inbox（记录 + 目录）。inbox 已换到别的会话时不动。 */
-export async function dropInbox(store, stateDir, identity, session) {
-  if (!identity || !session) return;
-  await store.db.run("DELETE FROM oa_inbox WHERE sender_code = ? AND session_code = ?", [identity, session]);
-  await removeStagingDir(stateDir, inboxDirName(identity, session)).catch(() => {});
+/** 删此人的 inbox（记录 + 目录）。 */
+export async function deleteInbox(store, stateDir, identity) {
+  if (!identity) return;
+  await store.db.run("DELETE FROM oa_inbox WHERE sender_code = ?", [identity]);
+  await removeStagingDir(stateDir, inboxDirName(identity)).catch(() => {});
 }
 
-/** 丢掉该人尚未 prepare 的 inbox（记录 + 目录，含 extraSession 的目录）。不碰工单。 */
-export async function wipePersonInbox(store, stateDir, identity, extraSession) {
-  if (!identity) return [];
-  const sessions = new Set([await getInboxSession(store, identity), extraSession].filter(Boolean));
-  await store.db.run("DELETE FROM oa_inbox WHERE sender_code = ?", [identity]);
-  for (const session of sessions) await removeStagingDir(stateDir, inboxDirName(identity, session));
-  return [...sessions];
+/** 只在 inbox 属于这个会话时删（取消 / 过期一张单时，清掉同一会话里还没进单的附件）。 */
+export async function deleteSessionInbox(store, stateDir, identity, session) {
+  const inbox = await readInbox(store, identity);
+  if (inbox && inbox.sessions.includes(session)) await deleteInbox(store, stateDir, identity);
 }
 
 /**
- * `/new`、群聊 session_end：丢掉尚未 prepare 的附件（进程内 inbound + inbox 记录 + 目录）。
- * 不碰已 prepare 的待确认单（那张仍按人留 24 小时）。
+ * `/new`、群聊 session_end：丢掉此人还没进工单的附件。不碰已建的待确认单（那张仍按人留 24 小时）。
  */
 export async function discardUnpreparedInbox({ store, stateDir, source, logger }) {
   const sender = senderIdOf(source);
-  if (!sender || !store) {
-    clearInboundMediaFor(source);
-    return { wiped: [] };
-  }
+  if (!sender || !store) return { wiped: false };
   return withStateLock(store, async () => {
-    clearInboundMediaFor(source);
-    const wiped = await wipePersonInbox(store, stateDir, identityCode(sender), sessionCode(source));
-    if (wiped.length) logger?.info?.(`[oa-workflow-bridge] discarded unprepared inbox sessions=${wiped.length}`);
-    return { wiped };
+    const identity = identityCode(sender);
+    const existed = Boolean(await readInbox(store, identity));
+    await deleteInbox(store, stateDir, identity);
+    if (existed) logger?.info?.("[oa-workflow-bridge] discarded unprepared inbox");
+    return { wiped: existed };
   });
 }
 
@@ -265,12 +265,10 @@ export function stagingPaths(stateDir) {
   return { root, stagingRoot: path.join(root, "staging") };
 }
 
-/** `attach` 在 prepare 之前落盘用的会话目录，和 `staging/{confirmationId}/` 同级。 */
-export function inboxDirName(identity, session) {
-  if (!/^[0-9a-f]{24}$/.test(String(identity)) || !/^[0-9a-f]{24}$/.test(String(session))) {
-    throw new Error("Invalid OA inbox owner");
-  }
-  return `inbox-${identity}-${session}`;
+/** inbox 附件落盘目录，和 `staging/{confirmationId}/` 同级。 */
+export function inboxDirName(identity) {
+  if (!/^[0-9a-f]{24}$/.test(String(identity))) throw new Error("Invalid OA inbox owner");
+  return `inbox-${identity}`;
 }
 
 async function removeStagingDir(stateDir, name) {
@@ -294,7 +292,7 @@ export async function expireTicket(store, stateDir, ticket) {
     const current = await getTicket(store, ticket.confirmationId);
     if (!isActiveTicket(current) || current.expiresAt > Date.now()) return false;
     await updateTicket(store, current.confirmationId, { status: "expired" });
-    await dropInbox(store, stateDir, current.identity, current.session);
+    await deleteSessionInbox(store, stateDir, current.identity, current.session);
     return true;
   });
   await removeStagingDirectory(stateDir, ticket.confirmationId).catch(() => {});
@@ -311,7 +309,12 @@ export async function cleanupExpired(store, stateDir, now = Date.now()) {
     [now],
   );
   for (const row of overdue) await expireTicket(store, stateDir, rowToTicket(row));
-  await withStateLock(store, () => store.db.run("DELETE FROM oa_inbox WHERE expires_at <= ?", [store.now()]));
+  await withStateLock(store, async () => {
+    // 过期的 inbox 先留着：员工下一次找机器人时要提示「刚才的图片已过期」（由 inbox.mjs 处理并删除）。
+    // 一天都没人再来的才在这里直接删。
+    const stale = await store.db.query("SELECT sender_code FROM oa_inbox WHERE expires_at <= ?", [store.now() - INBOX_STALE_MS]);
+    for (const row of stale) await deleteInbox(store, stateDir, row.sender_code);
+  });
   await store.db.run("DELETE FROM oa_identity WHERE expires_at <= ?", [store.now()]);
   return overdue.length + await cleanupStagingDirs(store, stateDir, now);
 }
@@ -330,7 +333,7 @@ async function cleanupStagingDirs(store, stateDir, now) {
     const inboxOwner = INBOX_DIR_RE.exec(name);
     let keep;
     if (inboxOwner) {
-      keep = Boolean(await getInbox(store, inboxOwner[1], inboxOwner[2]));
+      keep = Boolean(await readInbox(store, inboxOwner[1]));
     } else if (CONFIRMATION_DIR_RE.test(name)) {
       const ticket = await getTicket(store, name);
       keep = isActiveTicket(ticket) && (ticket.expiresAt > now || ticket.status !== "awaiting_confirmation");

@@ -1,121 +1,78 @@
-import { stageAttachments, stagedBytes, summarizeStaged } from "../attachments.mjs";
+import { limitExceeded, summarizeStaged } from "../attachments.mjs";
 import { resolveInboxTtlMs } from "../config.mjs";
-import {
-  attachmentIdentityKeys,
-  collectCtxMedia,
-  collectPrepareAttachments,
-  collectSubmitAttachments,
-  consumeInboundMediaFor,
-  peekInboundMediaFor,
-  rememberStagedPathsFor,
-} from "../inbound-media.mjs";
-import { maskFileNames } from "../log-redact.mjs";
-import {
-  expireTicket,
-  getActiveTicket,
-  getInbox,
-  getTicket,
-  inboxDirName,
-  isActiveTicket,
-  setInbox,
-  updateTicket,
-  withStateLock,
-} from "../store.mjs";
-import { alreadyPendingPayload, conflictView, dropRotatedInbox, fail, isExpired, maybeCleanup } from "./common.mjs";
+import { attachmentReceiptHint, hintZhFor } from "../hints.mjs";
+import { moveInboxToTicket } from "../inbox.mjs";
+import { confirmCard, INBOX_EXPIRED } from "../reply.mjs";
+import { expireTicket, getActiveTicket, getTicket, isActiveTicket, updateTicket, withStateLock, writeInbox } from "../store.mjs";
+import { captureToolMedia, cardFields, fail, isExpired, isSameSession, maybeCleanup } from "./common.mjs";
 
-/** 新附件已暂存：记成「已随单」并清空会话缓冲，下一轮不再重复收。 */
-function settleInbound(ctx, incoming) {
-  if (!incoming?.length) return;
-  rememberStagedPathsFor(ctx, incoming, { merge: true });
-  consumeInboundMediaFor(ctx);
-}
-
-async function attachToTicket({ store, stateDir, config, ctx, trust, params, logger }, confirmationId) {
-  const ticket = await getTicket(store, confirmationId);
-  if (!isActiveTicket(ticket)) fail("NOT_FOUND", "Pending OA confirmation was not found");
-  if (ticket.identity !== trust.identity) {
-    fail("SENDER_MISMATCH", "Only the original WeCom sender can add files to this OA request");
-  }
-  if (isExpired(ticket)) {
-    await expireTicket(store, stateDir, ticket);
-    fail("CONFIRMATION_EXPIRED", "OA confirmation expired");
-  }
-  if (ticket.status !== "awaiting_confirmation") {
-    fail("RECONCILIATION_REQUIRED", "This ticket requires OA reconciliation before retry");
-  }
-  const incoming = collectSubmitAttachments(ctx, params.attachments, stateDir);
-  logger?.info?.(
-    `[oa-workflow-bridge] attach collecting ${incoming.length} inbound (buffered=${peekInboundMediaFor(ctx).length} ctx=${collectCtxMedia(ctx, stateDir).length}): ${maskFileNames(incoming)}`,
-  );
-  const added = await stageAttachments({
-    stateDir,
-    confirmationId,
-    attachments: incoming,
-    config,
-    startIndex: ticket.staged.length,
-    existingBytes: stagedBytes(ticket.staged),
-  });
-  const staged = [...ticket.staged, ...added];
-  if (added.length) await updateTicket(store, confirmationId, { staged });
-  settleInbound(ctx, added.length ? incoming : []);
-  logger?.info?.(`[oa-workflow-bridge] attach ${added.length ? "attached" : "no-new"} added=${added.length}`);
-  return {
-    ok: true,
-    code: added.length ? "ATTACHED" : "NO_NEW_ATTACHMENT",
-    confirmationId,
-    addedCount: added.length,
-    ...summarizeStaged(staged),
-  };
-}
-
-/** 尚无待确认单：附件落到「提交人 + 会话」的 inbox，等 prepare 认领。 */
-async function attachToInbox({ store, stateDir, config, ctx, trust, params, logger }) {
-  await dropRotatedInbox(store, stateDir, trust);
-  const existing = await getInbox(store, trust.identity, trust.session);
-  const items = Array.isArray(existing?.items) ? existing.items : [];
-  const knownKeys = new Set(items.flatMap((item) => attachmentIdentityKeys(item.sourcePath, item.fileName)));
-  const incoming = collectPrepareAttachments(ctx, params.attachments, stateDir)
-    .filter((item) => !attachmentIdentityKeys(item.localPath, item.fileName).some((key) => knownKeys.has(key)));
-  logger?.info?.(
-    `[oa-workflow-bridge] attach collecting ${incoming.length} inbound (buffered=${peekInboundMediaFor(ctx).length} ctx=${collectCtxMedia(ctx, stateDir).length} inbox=${items.length}): ${maskFileNames(incoming)}`,
-  );
-  const added = await stageAttachments({
-    stateDir,
-    stageDirName: inboxDirName(trust.identity, trust.session),
-    attachments: incoming,
-    config,
-    startIndex: items.length,
-    existingBytes: stagedBytes(items),
-  });
-  const nextItems = [...items, ...added];
-  if (added.length) await setInbox(store, trust.identity, trust.session, nextItems, resolveInboxTtlMs(config));
-  settleInbound(ctx, added.length ? incoming : []);
-  logger?.info?.(`[oa-workflow-bridge] attach ${added.length ? "buffered" : "no-new"} added=${added.length}`);
-  return {
-    ok: true,
-    code: added.length ? "BUFFERED" : "NO_NEW_ATTACHMENT",
-    addedCount: added.length,
-    ...summarizeStaged(nextItems),
-  };
+function withExpiredNotice(notices, reply) {
+  return notices.expired ? [INBOX_EXPIRED, reply].filter(Boolean).join("\n\n") : reply;
 }
 
 /**
- * `attach`：把员工陆续发来的图片 / 文件并入工单，不换 confirmationId。
- * 带 confirmationId 时追加到待确认单；同会话已有待确认单时漏传 id 也并入该单；
- * 另一会话已有待确认单则拦截（跨会话只能确认或取消）。尚无待确认单时落到 inbox。
- * 附件数量与体积此刻就校验。认领单还是写 inbox 必须在锁内决定。
+ * `attach`：员工只发了图片 / 文件。附件已由 hook / 本轮 ctx 落进 inbox，这里只决定归属并回执：
+ * - 当前对话里有待确认单：整批并入该单（ATTACHED），回执后重发确认卡；
+ * - 否则留在 inbox 等 prepare 认领（BUFFERED），包括另一个对话里还留着旧单的情况。
+ * 超限当场报 ATTACHMENT_LIMIT_EXCEEDED，待确认单不变。
  */
 export async function attach(env) {
   const { store, stateDir, config, trust, params } = env;
   const result = await withStateLock(store, async () => {
-    const conflict = conflictView(await getActiveTicket(store, trust.identity), trust, null);
-    if (conflict && !conflict.expired && conflict.sameSession === false) {
-      return alreadyPendingPayload(conflict, config);
+    const { inbox, notices } = await captureToolMedia(env);
+    if (params.confirmationId) {
+      const named = await getTicket(store, params.confirmationId);
+      if (!isActiveTicket(named)) fail("NOT_FOUND", "Pending OA confirmation was not found");
+      if (named.identity !== trust.identity) {
+        fail("SENDER_MISMATCH", "Only the original WeCom sender can add files to this OA request");
+      }
     }
-    let confirmationId = params.confirmationId;
-    if (conflict?.expired && !confirmationId) await expireTicket(store, stateDir, conflict.expired);
-    if (!confirmationId && conflict && !conflict.expired) confirmationId = conflict.confirmationId;
-    return confirmationId ? attachToTicket(env, confirmationId) : attachToInbox(env);
+    let active = await getActiveTicket(store, trust.identity);
+    if (active && isExpired(active)) {
+      await expireTicket(store, stateDir, active);
+      if (params.confirmationId === active.confirmationId) fail("CONFIRMATION_EXPIRED", "OA confirmation expired");
+      active = null;
+    }
+
+    if (active && isSameSession(active, trust)) {
+      if (active.status !== "awaiting_confirmation") {
+        fail("RECONCILIATION_REQUIRED", "This ticket requires OA reconciliation before retry");
+      }
+      const moved = await moveInboxToTicket({
+        store, stateDir, config, identity: trust.identity, inbox, confirmationId: active.confirmationId, staged: active.staged,
+      });
+      if (moved.length) {
+        active.staged = [...active.staged, ...moved];
+        await updateTicket(store, active.confirmationId, { staged: active.staged });
+      }
+      if (notices.rejected) throw limitExceeded();
+      const counts = summarizeStaged(active.staged);
+      const payload = {
+        ok: true,
+        code: moved.length ? "ATTACHED" : "NO_NEW_ATTACHMENT",
+        confirmationId: active.confirmationId,
+        addedCount: moved.length,
+        ...counts,
+      };
+      const receipt = moved.length ? attachmentReceiptHint(counts) : hintZhFor(payload);
+      payload.replyZh = withExpiredNotice(notices, moved.length ? `${receipt}\n\n${confirmCard(cardFields(active))}` : (notices.expired ? "" : receipt));
+      return payload;
+    }
+
+    const fresh = inbox.items.filter((item) => !item.reported);
+    if (fresh.length) {
+      for (const item of inbox.items) item.reported = true;
+      await writeInbox(store, trust.identity, inbox, resolveInboxTtlMs(config));
+    }
+    if (notices.rejected) throw limitExceeded();
+    const payload = {
+      ok: true,
+      code: fresh.length ? "BUFFERED" : "NO_NEW_ATTACHMENT",
+      addedCount: fresh.length,
+      ...summarizeStaged(inbox.items),
+    };
+    payload.replyZh = withExpiredNotice(notices, notices.expired && !fresh.length ? "" : hintZhFor(payload));
+    return payload;
   });
   await maybeCleanup(store, stateDir);
   return result;

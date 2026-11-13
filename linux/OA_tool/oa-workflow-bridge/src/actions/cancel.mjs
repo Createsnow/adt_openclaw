@@ -1,21 +1,9 @@
-import { forgetStagedPathsFor, rememberInboundMediaFor } from "../inbound-media.mjs";
-import { dropInbox, expireTicket, getTicket, isActiveTicket, removeStagingDirectory, updateTicket, withStateLock } from "../store.mjs";
+import { CANCELLED } from "../reply.mjs";
+import { deleteSessionInbox, expireTicket, getTicket, isActiveTicket, removeStagingDirectory, updateTicket, withStateLock } from "../store.mjs";
 import { belongsTo, cardFields, fail, ignoreErrors, isExpired, maybeCleanup } from "./common.mjs";
 
-/**
- * cancel 会连同 staging 目录删掉附件副本。同一会话「cancel + prepare」改稿时，
- * 要把源 inbound 路径放回会话缓冲，新单才不会少附件。
- */
-function restoreStagedSources(ctx, staged) {
-  const sources = (staged || [])
-    .filter((item) => item?.sourcePath)
-    .map((item) => ({ localPath: item.sourcePath, fileName: item.fileName }));
-  if (!sources.length) return;
-  forgetStagedPathsFor(ctx, sources);
-  rememberInboundMediaFor(ctx, sources, { restoredFromCancel: true });
-}
-
-export async function cancel({ store, stateDir, ctx, trust, params }) {
+/** 明确取消：作废待确认单，删该单附件与同一对话里还没进单的附件。下一句要重新说问题。 */
+export async function cancel({ store, stateDir, trust, params }) {
   const confirmationId = params.confirmationId;
   const removed = await withStateLock(store, async () => {
     const ticket = await getTicket(store, confirmationId);
@@ -35,17 +23,16 @@ export async function cancel({ store, stateDir, ctx, trust, params }) {
       fail("RECONCILIATION_REQUIRED", "This ticket requires OA reconciliation before it can be cancelled");
     }
     await updateTicket(store, confirmationId, { status: "cancelled" });
-    await dropInbox(store, stateDir, ticket.identity, ticket.session);
+    await deleteSessionInbox(store, stateDir, ticket.identity, ticket.session);
     return ticket;
   });
-  await removeStagingDirectory(stateDir, confirmationId);
-  // 仅同一会话的改稿需要回灌附件；`/new` 后的明确取消不得把旧图灌进新对话。
-  if (removed.session === trust.session) restoreStagedSources(ctx, removed.staged);
+  await ignoreErrors(removeStagingDirectory(stateDir, confirmationId));
   await maybeCleanup(store, stateDir);
   return {
     ok: true,
     code: "CANCELLED",
     externalTicketId: removed.externalTicketId,
     ...cardFields(removed),
+    replyZh: CANCELLED,
   };
 }

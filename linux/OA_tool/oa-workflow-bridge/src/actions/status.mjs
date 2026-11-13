@@ -1,39 +1,67 @@
-import { submittedPreview } from "../hints.mjs";
+import { hintZhFor, submittedPreview } from "../hints.mjs";
+import { confirmCard, NO_QUERY_BY_NUMBER, NUDGE, otherSessionCard, reconcileCard } from "../reply.mjs";
 import { expireTicket, getActiveTicket, getTicket, isActiveTicket, listRecentTickets, removeStagingDirectory } from "../store.mjs";
 import {
   activeTicketCode,
   belongsTo,
   cardFields,
   closedTicketCode,
+  handlerNamesOf,
   ignoreErrors,
   isExpired,
+  isSameSession,
   maybeCleanup,
   retentionFields,
 } from "./common.mjs";
 
-/** 不带 confirmationId：此人当前待确认（如有）+ 最近记录（最多 5 条已提交单号）。 */
-async function personStatus({ store, stateDir, config, trust }) {
+/** 待确认 / 对账中的单给员工看什么。 */
+function activeReply(ticket, trust, context) {
+  if (ticket.status !== "awaiting_confirmation") {
+    return reconcileCard({ requestId: ticket.requestId, handlerNames: handlerNamesOf(ticket) });
+  }
+  if (!isSameSession(ticket, trust)) return otherSessionCard(cardFields(ticket));
+  const lead = context === "unclear_reply" ? NUDGE : "🔍 你有一张未提交的确认单。";
+  return `${lead}\n\n${confirmCard(cardFields(ticket))}`;
+}
+
+/**
+ * 不带 confirmationId：此人当前待确认（如有）+ 最近记录（最多 5 条已提交单号）。
+ * context=unclear_reply：员工在确认卡上回了「好的 / 不用了」等，回请改口并重发确认卡；
+ * context=asked_oa_number：员工报了 OA 单号问进度，先说明不能按单号查。
+ */
+async function personStatus({ store, stateDir, config, trust, params }) {
   let pendingView = null;
-  const active = await getActiveTicket(store, trust.identity);
+  let active = await getActiveTicket(store, trust.identity);
+  if (active && isExpired(active)) {
+    await expireTicket(store, stateDir, active);
+    active = null;
+  }
   if (active) {
-    if (isExpired(active)) {
-      await expireTicket(store, stateDir, active);
-    } else {
-      pendingView = {
-        confirmationId: active.confirmationId,
-        code: activeTicketCode(active),
-        ...cardFields(active),
-        ...retentionFields(active, trust, config),
-      };
-    }
+    pendingView = {
+      confirmationId: active.confirmationId,
+      code: activeTicketCode(active),
+      ...cardFields(active),
+      ...retentionFields(active, trust, config),
+    };
   }
   const recent = await listRecentTickets(store, trust.identity);
   const preview = submittedPreview(recent);
-  // 问进度惯例不带 confirmationId。对账中的单必须抬成顶层码，否则模型只看见 PERSON_STATUS + pending 就会发确认卡。
-  if (pendingView?.code === "RECONCILIATION_REQUIRED") {
-    return { ok: true, code: "RECONCILIATION_REQUIRED", confirmationId: pendingView.confirmationId, pending: pendingView, recent, ...preview };
+  if (pendingView) {
+    const payload = {
+      ok: true,
+      code: pendingView.code === "RECONCILIATION_REQUIRED" ? "RECONCILIATION_REQUIRED" : "PERSON_STATUS",
+      confirmationId: pendingView.confirmationId,
+      pending: pendingView,
+      recent,
+      ...preview,
+    };
+    payload.replyZh = activeReply(active, trust, params.context);
+    return payload;
   }
-  return { ok: true, code: "PERSON_STATUS", pending: pendingView, recent, ...preview };
+  const payload = { ok: true, code: "PERSON_STATUS", pending: null, recent, ...preview };
+  const list = hintZhFor(payload);
+  payload.replyZh = params.context === "asked_oa_number" ? `${NO_QUERY_BY_NUMBER}\n${list}` : list;
+  return payload;
 }
 
 async function ticketStatus({ store, stateDir, config, trust }, confirmationId) {
@@ -51,6 +79,7 @@ async function ticketStatus({ store, stateDir, config, trust }, confirmationId) 
       externalTicketId: ticket.externalTicketId || null,
       ...cardFields(ticket),
       ...retentionFields(ticket, trust, config),
+      replyZh: activeReply(ticket, trust),
     };
   }
   await ignoreErrors(removeStagingDirectory(stateDir, confirmationId));

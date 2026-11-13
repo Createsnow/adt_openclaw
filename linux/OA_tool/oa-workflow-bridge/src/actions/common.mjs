@@ -1,7 +1,9 @@
 import { summarizeStaged } from "../attachments.mjs";
+import { captureInbound, takeInboxNotices } from "../inbox.mjs";
+import { collectToolMedia } from "../inbound-media.mjs";
 import { pendingFaultLocation } from "../mapping.mjs";
 import { OAClientError } from "../oa-client.mjs";
-import { cleanupExpired, getActiveTicket, wipePersonInbox, getInboxSession } from "../store.mjs";
+import { cleanupExpired } from "../store.mjs";
 
 export function fail(code, message, details = null) {
   throw new OAClientError(message, { code, details });
@@ -20,8 +22,9 @@ export function belongsTo(ticket, trust) {
   return Boolean(ticket?.identity && ticket.identity === trust.identity);
 }
 
+/** 工单是不是在当前这个对话里建的（会话码可能是 sessionId 或 sessionKey 算出来的）。 */
 export function isSameSession(ticket, trust) {
-  return Boolean(ticket?.session && trust?.session && ticket.session === trust.session);
+  return Boolean(ticket?.session && (trust?.sessions || [trust?.session]).includes(ticket.session));
 }
 
 /** 回执里回显给员工的问题预览、地点、附件计数。 */
@@ -41,6 +44,10 @@ export function retentionFields(ticket, trust, config) {
   };
 }
 
+export function handlerNamesOf(ticket) {
+  return ticket?.draft?.handlerNames || "";
+}
+
 /** 仍占名额的单对外的码：提交中 / 待对账一律 RECONCILIATION_REQUIRED。 */
 export function activeTicketCode(ticket) {
   return ticket.status === "awaiting_confirmation" ? "AWAITING_CONFIRMATION" : "RECONCILIATION_REQUIRED";
@@ -57,54 +64,18 @@ export function closedTicketCode(ticket) {
   }
 }
 
-/**
- * 同一提交人全局只允许一张待确认单（跨 `/new`、私聊 / 群聊仍拦住）。
- * 返回 null（无冲突）、`{ expired }`（占名额的单已到期，调用方先过期它）或冲突视图。
- */
-export function conflictView(existing, trust, externalTicketId) {
-  if (!existing) return null;
-  if (isExpired(existing)) return { expired: existing };
-  if (externalTicketId && existing.externalTicketId === externalTicketId) return null;
-  return {
-    confirmationId: existing.confirmationId,
-    externalTicketId: existing.externalTicketId || null,
-    expiresAt: existing.expiresAt,
-    sameSession: isSameSession(existing, trust),
-    ...cardFields(existing),
-  };
-}
-
-export async function personConflict(store, trust, externalTicketId) {
-  return conflictView(await getActiveTicket(store, trust.identity), trust, externalTicketId);
-}
-
-export function alreadyPendingPayload(conflict, config) {
-  const crossSession = conflict?.sameSession === false;
-  return {
-    ok: false,
-    code: "ALREADY_PENDING",
-    message: crossSession
-      ? "This sender already has a pending OA confirmation in another session. Confirm or cancel it within the retention window; do not add files or rewrite from this session."
-      : "This sender already has a pending OA confirmation.",
-    confirmationId: conflict.confirmationId,
-    externalTicketId: conflict.externalTicketId,
-    summary: conflict.summary ?? null,
-    location: conflict.location ?? null,
-    imageCount: conflict.imageCount ?? 0,
-    documentCount: conflict.documentCount ?? 0,
-    attachmentCount: conflict.attachmentCount ?? 0,
-    sameSession: !crossSession,
-    retentionHours: config?.pendingTtlHours,
-    expiresAt: isoExpiresAt(conflict.expiresAt),
-  };
-}
-
-/** 会话已换（`/new`、空闲新会话）时丢掉上一会话尚未 prepare 的 inbox，避免旧图进新单。调用方持锁。 */
-export async function dropRotatedInbox(store, stateDir, trust) {
-  const pointed = await getInboxSession(store, trust.identity);
-  if (pointed && pointed !== trust.session) {
-    await wipePersonInbox(store, stateDir, trust.identity, pointed);
-  }
+/** 收下本轮工具 ctx 里的附件进 inbox，并取出待报提示。调用方持锁。 */
+export async function captureToolMedia({ store, stateDir, config, ctx, trust, params }) {
+  const captured = await captureInbound({
+    store,
+    stateDir,
+    config,
+    source: ctx,
+    attachments: collectToolMedia(ctx, params?.attachments, stateDir),
+  });
+  const inbox = captured?.inbox || { sessions: trust.sessions, items: [], seen: [], rejected: 0, expiredNotice: false };
+  const notices = await takeInboxNotices(store, trust.identity, captured?.inbox, config);
+  return { inbox, notices };
 }
 
 export async function ignoreErrors(task) {

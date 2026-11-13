@@ -1,8 +1,9 @@
-import { encodeStagedAttachments, stageAttachments, stagedBytes } from "../attachments.mjs";
-import { collectSubmitAttachments, consumeInboundMediaFor, rememberStagedPathsFor } from "../inbound-media.mjs";
+import { encodeStagedAttachments, limitExceeded } from "../attachments.mjs";
+import { moveInboxToTicket } from "../inbox.mjs";
 import { buildCreatePayload, pendingFaultLocation, sanitizeSupplement } from "../mapping.mjs";
+import { inactiveCard, reconcileCard, submittedCard } from "../reply.mjs";
 import { expireTicket, getTicket, isActiveTicket, removeStagingDirectory, updateTicket, withStateLock } from "../store.mjs";
-import { belongsTo, fail, ignoreErrors, isExpired, isSameSession, maybeCleanup } from "./common.mjs";
+import { belongsTo, captureToolMedia, fail, handlerNamesOf, ignoreErrors, isExpired, isSameSession, maybeCleanup } from "./common.mjs";
 
 /** 同进程里正在提交的确认单：并发的第二次确认等第一次的结果，不再打 OA。 */
 const inflightSubmits = new Map();
@@ -26,7 +27,8 @@ function outcomeForClosedTicket(ticket, trust) {
 }
 
 /** 锁内校验并把单标成 submitting。返回 `{ ticket }`（可以提交）或 `{ outcome }` / `{ waitInflight }`。 */
-async function claimForSubmit({ store, stateDir, config, ctx, trust, params }) {
+async function claimForSubmit(env) {
+  const { store, stateDir, config, trust, params } = env;
   const { confirmationId } = params;
   return withStateLock(store, async () => {
     const ticket = await getTicket(store, confirmationId);
@@ -40,28 +42,21 @@ async function claimForSubmit({ store, stateDir, config, ctx, trust, params }) {
     }
     if (ticket.status === "submitting") return { waitInflight: true };
     if (ticket.status === "unknown") fail("RECONCILIATION_REQUIRED", "This ticket requires OA reconciliation before retry");
-    if (!config.active) return { inactive: true };
-    // 跨会话确认只提交旧单已暂存的附件，不把本会话新图并进去。
-    const sameSession = isSameSession(ticket, trust);
-    const extra = sameSession ? collectSubmitAttachments(ctx, params.attachments, stateDir) : [];
-    const extraStaged = extra.length ? await stageAttachments({
-      stateDir,
-      confirmationId,
-      attachments: extra,
-      config,
-      startIndex: ticket.staged.length,
-      existingBytes: stagedBytes(ticket.staged),
-    }) : [];
-    ticket.staged = [...ticket.staged, ...extraStaged];
+    if (!config.active) return { inactive: ticket };
+    // 同一对话里确认时随消息发来的新图并入；另一个对话里确认只提交旧单已有的附件。
+    if (isSameSession(ticket, trust)) {
+      const { inbox, notices } = await captureToolMedia(env);
+      if (notices.rejected) throw limitExceeded();
+      const moved = await moveInboxToTicket({
+        store, stateDir, config, identity: trust.identity, inbox, confirmationId, staged: ticket.staged,
+      });
+      ticket.staged = [...ticket.staged, ...moved];
+    }
     await updateTicket(store, confirmationId, { status: "submitting", staged: ticket.staged });
     ticket.status = "submitting";
     // 必须在锁内登记：并发的第二次确认一拿到锁就会看见 submitting，要能找到这次的结果。
     const inflight = createDeferred();
     inflightSubmits.set(confirmationId, inflight.promise);
-    if (extraStaged.length) {
-      rememberStagedPathsFor(ctx, extra, { merge: true });
-      consumeInboundMediaFor(ctx);
-    }
     return { ticket, inflight };
   });
 }
@@ -135,6 +130,7 @@ async function createInOa({ store, stateDir, logger, deps, config, params }, tic
     location: pendingFaultLocation(ticket) || null,
     ...attachmentSummary,
   };
+  const handlerNames = handlerNamesOf(ticket);
   try {
     await withStateLock(store, () => updateTicket(store, confirmationId, { status: "submitted", requestId: created.requestId }));
   } catch (error) {
@@ -145,11 +141,11 @@ async function createInOa({ store, stateDir, logger, deps, config, params }, tic
       requestId: created.requestId,
       errorCode: "DB_UNAVAILABLE",
     })));
-    return { ok: false, code: "RECONCILIATION_REQUIRED", ...result };
+    return { ok: false, code: "RECONCILIATION_REQUIRED", ...result, replyZh: reconcileCard({ requestId: created.requestId, handlerNames }) };
   }
   await ignoreErrors(deps.removeSubmittedStaging(stateDir, confirmationId));
   await maybeCleanup(store, stateDir);
-  return { ok: true, code: "SUBMITTED", ...result };
+  return { ok: true, code: "SUBMITTED", ...result, replyZh: submittedCard({ ...result, handlerNames }) };
 }
 
 export async function submitConfirmed(env) {
@@ -175,7 +171,12 @@ export async function submitConfirmed(env) {
     return outcome;
   }
   if (claim.inactive) {
-    return { ok: false, code: "OA_BRIDGE_INACTIVE", message: "OA live submission is not enabled." };
+    return {
+      ok: false,
+      code: "OA_BRIDGE_INACTIVE",
+      message: "OA live submission is not enabled.",
+      replyZh: inactiveCard({ handlerNames: handlerNamesOf(claim.inactive) }),
+    };
   }
 
   const { inflight } = claim;

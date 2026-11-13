@@ -11,7 +11,7 @@ export const ACTIVE_TICKET_STATUSES = Object.freeze(["awaiting_confirmation", "s
  * oa_ticket：一张确认单一行（待确认 → 提交中 / 待对账 → 已提交 / 已取消 / 已过期 / 被拒）。
  * active_sender：仍占「同一人全局一张待确认」名额（待确认 / 提交中 / 待对账）时等于 sender_code，
  *   结束后置 NULL；唯一索引在库层面兜底「同一人全局一张」。由 store.mjs 随状态一起写。
- * oa_inbox：每人一行，prepare 之前 attach 的附件清单。
+ * oa_inbox：每人一行，收到但还没进工单的附件（hook 一收到就落盘入库），带去重键与会话码。
  * oa_identity：企微发送人 → OA 人员 id 缓存（命中 24 小时，查不到的负缓存 10 分钟）。
  */
 export const MYSQL_SCHEMA = Object.freeze([
@@ -37,11 +37,11 @@ export const MYSQL_SCHEMA = Object.freeze([
     KEY idx_status_expires (status, expires_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS oa_inbox (
-    sender_code  CHAR(24) NOT NULL,
-    session_code CHAR(24) NOT NULL,
-    items_json   TEXT     NOT NULL,
-    expires_at   BIGINT   NOT NULL,
-    updated_at   BIGINT   NOT NULL,
+    sender_code   CHAR(24) NOT NULL,
+    session_codes TEXT     NOT NULL,
+    state_json    TEXT     NOT NULL,
+    expires_at    BIGINT   NOT NULL,
+    updated_at    BIGINT   NOT NULL,
     PRIMARY KEY (sender_code)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS oa_identity (

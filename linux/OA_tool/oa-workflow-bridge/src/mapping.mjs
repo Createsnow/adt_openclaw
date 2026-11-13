@@ -33,6 +33,29 @@ const DEMAND_TYPES = Object.freeze({
 /** 员工选择的故障园区。不是 OA 人事 `bgdd`，也不是 `systemName` 里「国内 / 越南B部」这类系统后缀。 */
 export const FAULT_LOCATIONS = Object.freeze(["智园", "大磡", "深汕", "越南", "光明", "泗洪"]);
 
+/** 问地点时员工回字母（A–F）：插件翻译成园区名。数字只留给确认 / 取消。 */
+const LOCATION_LETTERS = Object.freeze({ A: "智园", B: "大磡", C: "深汕", D: "越南", E: "光明", F: "泗洪" });
+
+function locationFromInput(value) {
+  const text = String(value ?? "").trim();
+  return LOCATION_LETTERS[text.toUpperCase()] || text;
+}
+
+const SUMMARY_MAX = 20;
+
+/**
+ * 确认卡上的问题预览，由插件从员工原话（problemDescription）截取：全文 ≤20 字原样；
+ * 否则取到第一个句读（≤20 字）再加「...」；第一句也太长就硬截 20 字加「...」。
+ */
+export function summarize(problemDescription) {
+  const text = String(problemDescription ?? "").replace(/\s+/g, " ").trim();
+  const bare = text.replace(/[。．.！!？?；;，,\s]+$/u, "");
+  if ([...bare].length <= SUMMARY_MAX) return bare;
+  const first = /^(.+?)[。．！!？?；;，,]/u.exec(text)?.[1]?.trim() || "";
+  if (first && [...first].length <= SUMMARY_MAX) return `${first}...`;
+  return `${[...bare].slice(0, SUMMARY_MAX).join("")}...`;
+}
+
 export function campusFromSystemName(systemName) {
   const match = String(systemName ?? "").trim().match(/（([^）]+)）\s*$/);
   const campus = match?.[1] || "";
@@ -44,11 +67,11 @@ export function campusFromSystemName(systemName) {
  * `电脑/打印机/网络问题（智园）` 这类系统名兑底。邮箱（国内）、MES（越南B部）不兑底。
  */
 export function normalizeFaultLocation({ location, systemName } = {}) {
-  const explicit = String(location ?? "").trim();
+  const explicit = locationFromInput(location);
   const fromName = campusFromSystemName(systemName);
   if (explicit) {
     if (!FAULT_LOCATIONS.includes(explicit)) {
-      fail("INVALID_LOCATION", "location must be one of 智园 / 大磡 / 深汕 / 越南 / 光明 / 泗洪");
+      fail("INVALID_LOCATION", "location must be A–F or one of 智园 / 大磡 / 深汕 / 越南 / 光明 / 泗洪");
     }
     if (fromName && fromName !== explicit) {
       fail("LOCATION_MISMATCH", "location does not match systemName");
@@ -151,7 +174,7 @@ export function allocateExternalTicketId(ctx = {}, now = Date.now()) {
 export const FALLBACK_TICKET_TYPE = "运维支持";
 export const FALLBACK_SYSTEM_NAME = "其他";
 
-export function normalizeDraft(raw, { options, typeSystems, handlers }) {
+export function normalizeDraft(raw, { options, typeSystems, handlers, names }) {
   const ticketType = String(raw?.ticketType ?? "").trim() || FALLBACK_TICKET_TYPE;
   const typeConfig = TICKET_TYPES[ticketType];
   if (!typeConfig) fail("INVALID_TICKET_TYPE", "Unsupported ticket type");
@@ -170,7 +193,6 @@ export function normalizeDraft(raw, { options, typeSystems, handlers }) {
     location: normalizeFaultLocation({ location: raw?.location, systemName }),
     systemField: typeConfig.systemField,
     systemOptionId,
-    summary: requireText(raw?.summary, "summary", 200),
     problemDescription: requireText(raw?.problemDescription, "problemDescription", 6000),
     impactScope: optionalText(raw?.impactScope, 200),
     occurredAt: optionalText(raw?.occurredAt, 200),
@@ -179,7 +201,9 @@ export function normalizeDraft(raw, { options, typeSystems, handlers }) {
     demandTypeValue: "",
     monthlyHours: "",
     handlerIds: requireHandlerIds(handlers.get(systemName)),
+    handlerNames: names?.get(systemName) || "",
   };
+  normalized.summary = summarize(normalized.problemDescription);
   if (ticketType === "IT需求") {
     normalized.demandType = requireText(raw?.demandType, "demandType", 16);
     normalized.demandTypeValue = DEMAND_TYPES[normalized.demandType];
