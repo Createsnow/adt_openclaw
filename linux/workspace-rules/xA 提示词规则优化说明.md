@@ -35,7 +35,7 @@ OpenClaw 会话开始时注入上述 workspace 文件；热路径**不** `read` 
 cp -r "$REPO/workspace-rules/workspace/." ~/xa/workspace/
 ```
 
-工作区 Markdown 下一轮对话生效；插件代码或 `systems.json` 改了要重建镜像并 `down && up`（见 OA 桥接接入手册 4.2）。
+工作区 Markdown 下一轮对话生效；插件代码或 `systems.json` 改了要重建镜像并 `down && up`（见安装手册第 5 节）。
 
 ## 4. `openclaw.json` 里不能漏的
 
@@ -43,7 +43,7 @@ cp -r "$REPO/workspace-rules/workspace/." ~/xa/workspace/
 - `bootstrapMaxChars: 40000` 与 `skills: []` 写在 **defaults 和 `itservicedeskagent` 两处**。只写 defaults 对已绑定 Agent 不生效；不写 `skills: []` 企微插件的 `wecomcli-*` 会进 prompt。
 - 两处 `tools.alsoAllow` 只有 `oa_workflow`；Agent `deny` 含 `group:fs` 等。
 
-改完：`config validate` → restart Gateway → 企微里单独发 `/new`，再单独发 `/context detail`。通过标准：`AGENTS.md` 为 `OK`（未截断）、`Skills list` 为 0。字段说明见 [openclaw.json 配置参考.md](../openclaw.json%20配置参考.md) 第 11.3 节。
+改完：`config validate` → restart Gateway → 企微里单独发 `/new`，再单独发 `/context detail`。通过标准：`AGENTS.md` 为 `OK`（未截断）、`Skills list` 为 0。字段说明见 [openclaw.json 配置参考.md](../openclaw.json%20配置参考.md) 第 2 节。
 
 ## 5. 不要做的事
 
