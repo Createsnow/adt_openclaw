@@ -3,13 +3,13 @@
     "mode": "merge",
     "providers": {
       "bailian": {
-        "baseUrl": "${AIDY_DOMESTIC_BASE_URL}",
-        "apiKey": "${AIDY_DOMESTIC_API_KEY}",
+        "baseUrl": "${XA_DOMESTIC_BASE_URL}",
+        "apiKey": "${XA_DOMESTIC_API_KEY}",
         "api": "openai-completions",
         "timeoutSeconds": 20,
         "models": [
           {
-            "id": "${AIDY_DOMESTIC_MODEL_ID}",
+            "id": "${XA_DOMESTIC_MODEL_ID}",
             "name": "qwen3.8 flash",
             "reasoning": false,
             "input": [
@@ -52,7 +52,7 @@
         "name": "ITServiceDeskAgent",
         "workspace": "/home/node/.openclaw/workspace",
         "agentDir": "/home/node/.openclaw/agents/itservicedeskagent/agent",
-        "model": "${AIDY_DOMESTIC_MODEL_REF}",
+        "model": "${XA_DOMESTIC_MODEL_REF}",
         "thinkingDefault": "off",
         "bootstrapMaxChars": 40000,
         "skills": [],
@@ -175,8 +175,8 @@
   "channels": {
     "wecom": {
       "enabled": true,
-      "botId": "${AIDY_IT_WECOM_BOT_ID}",
-      "secret": "${AIDY_IT_WECOM_BOT_SECRET}",
+      "botId": "${XA_IT_WECOM_BOT_ID}",
+      "secret": "${XA_IT_WECOM_BOT_SECRET}",
       "dmPolicy": "open",
       "groupPolicy": "open",
       "sendThinkingMessage": true,

@@ -28,7 +28,7 @@ function resolveStateDir() {
   if (explicit) return path.resolve(explicit);
   const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim();
   if (configPath) return path.dirname(path.resolve(configPath));
-  return path.join(homedir(), ".openclaw-aidy-it-service");
+  return path.join(homedir(), ".openclaw-xa-it-service");
 }
 
 let stateStorePromise;
@@ -63,7 +63,7 @@ async function shutdownStore() {
 
 const plugin = {
   id: "oa-workflow-bridge-redis",
-  name: "Aidy OA Workflow Bridge (Redis)",
+  name: "xA OA Workflow Bridge (Redis)",
   description: "Ecology OA submission bridge with Redis-backed pending and ledger for a single Gateway",
   configSchema: {
     jsonSchema: { type: "object", additionalProperties: false, properties: {} },

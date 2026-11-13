@@ -67,7 +67,7 @@ function dependencies({ createRequest } = {}) {
 }
 
 async function scratch(t, label) {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), `aidy-oa-${label}-`));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), `xa-oa-${label}-`));
   t.after(() => {
     clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });

@@ -2,7 +2,7 @@
 
 适用对象：需要看清 **`oa-workflow-bridge-redis` 与独立 Redis 怎么串起来、每一步碰哪把 key** 的工程师。
 
-部署命令、YAML、错误码、启停顺序仍以 [OA Workflow Bridge（Redis）接入手册.md](OA%20Workflow%20Bridge（Redis）接入手册.md) 为准。独立 Redis 怎么跑见 [../Redis 独立实例部署手册.md](../Redis%20独立实例部署手册.md)。全景 I/O 见 [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md)。身份转换步骤见 [身份适配器说明.md](身份适配器说明.md)。
+部署命令、YAML、错误码、启停顺序仍以 [OA Workflow Bridge（Redis）接入手册.md](OA%20Workflow%20Bridge（Redis）接入手册.md) 为准。独立 Redis 怎么跑见 [../Redis 独立实例部署手册.md](../Redis%20独立实例部署手册.md)。全景 I/O 见 [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md)。身份转换步骤见 [身份适配器说明.md](身份适配器说明.md)。
 
 **本文只讲：** OA 插件 × Redis 的节点顺序、谁读谁写、五个 action 碰到哪些 key。不重复 compose / 错误码全文。
 
@@ -34,7 +34,7 @@
 ```mermaid
 flowchart TD
   E[员工企微] --> C[wecom 通道<br/>requesterSenderId]
-  C --> A[Aidy Agent<br/>AGENTS.md 唯一命中]
+  C --> A[xA Agent<br/>AGENTS.md 唯一命中]
   A --> P[oa_workflow.prepare]
   P --> LED["Redis GET ledger<br/>工单号幂等"]
   LED --> G["Redis GET idmap"]
@@ -68,7 +68,7 @@ flowchart TD
 | 序 | 节点 | 输入 | 输出 | Redis |
 | --- | --- | --- | --- | --- |
 | 1 | wecom 通道 | `from.userid`（`wo…` 加密串） | `ctx.requesterSenderId` | 不写 |
-| 2 | Aidy | 员工文字 + 已注入 `AGENTS.md` | 唯一命中才 `prepare` | 不写 |
+| 2 | xA | 员工文字 + 已注入 `AGENTS.md` | 唯一命中才 `prepare` | 不写 |
 | 3 | `oa_workflow.prepare` | 可信 wecom ctx + draft | 身份未解析则停 | `GET ledger` 做工单号幂等 |
 | 4 | 身份 / idmap | `mappingCode` = SHA-256(SenderId) 截前 24 位 | 1–18 位 `oaUserId`（建单 Header `userid` 与 `xqsqr`） | 桥接 **只 GET** `idmap` |
 | 5 | 适配器（仅 miss） | 加密 SenderId | 写缓存后返回人员 id | **适配器** `SET EX idmap`；失败 `SET EX idmiss` |
@@ -115,7 +115,7 @@ flowchart TD
 
 ## 5. 身份 miss
 
-查找键是 **`mappingCode`**，不是工号、不是姓名。缓存命中：0 次外部 HTTP。桥接 `oa-client.mjs` **不**调企微、**不**调 `getHrmUserInfoWithPage`（用工号点查人员 id 只在适配器）。`submit_confirmed` 另走 `getHrmSimpleInfo`，见第 6 节与 [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) 第 7 节。
+查找键是 **`mappingCode`**，不是工号、不是姓名。缓存命中：0 次外部 HTTP。桥接 `oa-client.mjs` **不**调企微、**不**调 `getHrmUserInfoWithPage`（用工号点查人员 id 只在适配器）。`submit_confirmed` 另走 `getHrmSimpleInfo`，见第 6 节与 [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) 第 7 节。
 
 ```mermaid
 flowchart TD
@@ -215,8 +215,8 @@ ledger 按内部工单号点查：防同一号再打 OA，不是按人冷却。�
 ## 8. 连接怎么进插件
 
 ```text
-~/aidy-redis（独立 compose，AOF + noeviction）
-        │  主机名 aidy-redis:6379
+~/xa-redis（独立 compose，AOF + noeviction）
+        │  主机名 xa-redis:6379
         ▼
 entrypoint export OA_REDIS_URL
         ▼
@@ -238,7 +238,7 @@ src/redis-client.mjs  createClient({ url, database })
 
 | 文档 | 内容 |
 | --- | --- |
-| [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) | 全景：哪些进 OA / 不进、各层 I/O；**第 7 节两条人事 HTTP** |
+| [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) | 全景：哪些进 OA / 不进、各层 I/O；**第 7 节两条人事 HTTP** |
 | [OA Workflow Bridge（Redis）接入手册.md](OA%20Workflow%20Bridge（Redis）接入手册.md) | 部署、工具契约、错误码、Key 生命周期；**3.3.1 `SUBMITTED` 后删留** |
 | [../Redis 独立实例部署手册.md](../Redis%20独立实例部署手册.md) | 独立 Redis、AOF、密码分边 |
 | [身份适配器说明.md](身份适配器说明.md) | miss 路径、凭据注入、会话 jsonl |

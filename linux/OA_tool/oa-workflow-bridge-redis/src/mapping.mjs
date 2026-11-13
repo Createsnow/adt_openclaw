@@ -137,7 +137,7 @@ function ctxReceivedAt(ctx) {
 }
 
 /**
- * Aidy 内部幂等号。模型传入的 draft.externalTicketId 一律忽略。
+ * xA 内部幂等号。模型传入的 draft.externalTicketId 一律忽略。
  * 时间用 WeComReceivedAt（无则当前时间，Asia/Bangkok）；XXXX 用 message_id 前 4 位。
  * 无 message_id 时后缀混入随机熵，避免同秒第二次 prepare 撞上上一张 unknown 单的 ledger。
  */

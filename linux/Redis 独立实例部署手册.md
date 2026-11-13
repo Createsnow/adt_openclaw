@@ -2,7 +2,7 @@
 
 > 本文档由仓库根目录原文档**重组**而来：只调整章节归属与交叉引用，**不改变**部署步骤、命令、YAML、错误码或禁止事项。阅读顺序见 [README.md](README.md)。
 
-适用对象：在 **WSL2 + Docker** 上部署 Aidy，并让 **OA Redis 版桥接**（`oa-workflow-bridge-redis`）对接 **独立 Redis 服务** 的工程师。
+适用对象：在 **WSL2 + Docker** 上部署 xA，并让 **OA Redis 版桥接**（`oa-workflow-bridge-redis`）对接 **独立 Redis 服务** 的工程师。
 
 插件逻辑、工具 API、Key 设计、Gateway compose / entrypoint 见：
 
@@ -51,8 +51,8 @@ OA_REDIS_URL  →  redis://:密码@主机:6379/库号
 
 | 摆法 | 模拟的是什么 | 结论 |
 | --- | --- | --- |
-| **A. `~/aidy-redis` 独立 compose + `~/aidy` 只连 URL** | 生产独立 Redis | **本文默认路径** |
-| B. Redis 写进 `~/aidy/docker-compose.yml` | 单机试点 | 不推荐；`compose down` 会把存储一起停 |
+| **A. `~/xa-redis` 独立 compose + `~/xa` 只连 URL** | 生产独立 Redis | **本文默认路径** |
+| B. Redis 写进 `~/xa/docker-compose.yml` | 单机试点 | 不推荐；`compose down` 会把存储一起停 |
 | C. Windows 原生 Redis，容器连 `127.0.0.1` | 错误的 OS + 错误的网络 | **不采用** |
 
 C 不采用：官方 Redis 以 Linux 为准；容器里的 `127.0.0.1` 是 Gateway 自己，不是 Windows，也不是「另一台 Redis」。
@@ -61,21 +61,21 @@ C 不采用：官方 Redis 以 Linux 为准；容器里的 `127.0.0.1` 是 Gatew
 
 ```text
 [独立 Redis]                         [OpenClaw]
-~/aidy-redis/docker-compose.yml      ~/aidy/docker-compose.yml
+~/xa-redis/docker-compose.yml      ~/xa/docker-compose.yml
   只启动 redis:7-alpine                不声明 redis 服务
-  网络名 aidy-shared（可被加入）        networks: aidy-shared  external: true
+  网络名 xa-shared（可被加入）        networks: xa-shared  external: true
   数据 ./redis-data                    entrypoint 只 export OA_REDIS_URL
          │                                        │
-         └──────── 主机名 aidy-redis:6379 ────────┘
+         └──────── 主机名 xa-redis:6379 ────────┘
 ```
 
 | 本机 | 生产 |
 | --- | --- |
-| `aidy-redis` 容器 | Redis 虚拟机 / 云实例 |
-| Docker 网络 `aidy-shared` | VPC / 应用内网 |
-| `OA_REDIS_URL=redis://:密码@aidy-redis:6379/0` | `OA_REDIS_URL=redis://:密码@redis.internal:6379/0` |
-| `~/aidy-redis/secrets/redis_password.txt` | Redis 主机/控制台上的 `requirepass` |
-| `~/aidy/secrets/oa_redis_password.txt` | 应用侧自己的连接密码（Vault / 应用 secret） |
+| `xa-redis` 容器 | Redis 虚拟机 / 云实例 |
+| Docker 网络 `xa-shared` | VPC / 应用内网 |
+| `OA_REDIS_URL=redis://:密码@xa-redis:6379/0` | `OA_REDIS_URL=redis://:密码@redis.internal:6379/0` |
+| `~/xa-redis/secrets/redis_password.txt` | Redis 主机/控制台上的 `requirepass` |
+| `~/xa/secrets/oa_redis_password.txt` | 应用侧自己的连接密码（Vault / 应用 secret） |
 | 停 Gateway，Redis 继续跑 | 发版重启应用，不动 Redis |
 
 本机单容器 **模拟不了**：Cluster/Sentinel 故障转移、跨机房延迟、云白名单。这些必须在目标 Redis 上验证。
@@ -96,8 +96,8 @@ C 不采用：官方 Redis 以 Linux 为准；容器里的 `127.0.0.1` 是 Gatew
 
 ```json
 "redis": {
-  "url": "redis://aidy-redis:6379/0",
-  "keyPrefix": "oa-bridge-aidy-it",
+  "url": "redis://xa-redis:6379/0",
+  "keyPrefix": "oa-bridge-xa-it",
   "database": 0
 }
 ```
@@ -106,7 +106,7 @@ C 不采用：官方 Redis 以 Linux 为准；容器里的 `127.0.0.1` 是 Gatew
 
 ---
 
-## 3. 本机生产对齐：独立 Redis（`~/aidy-redis`）
+## 3. 本机生产对齐：独立 Redis（`~/xa-redis`）
 
 以下是 **推荐部署**。假定 OpenClaw 已按 WSL2 安装手册阶段 B，或 Linux 服务器安装手册第 13 节（模型已注入且 `/healthz` 通）跑通。
 
@@ -116,24 +116,24 @@ C 不采用：官方 Redis 以 Linux 为准；容器里的 `127.0.0.1` 是 Gatew
 
 | 角色 | 文件（路径必须不同） | 用途 |
 | --- | --- | --- |
-| Redis 服务 | `~/aidy-redis/secrets/redis_password.txt` | `--requirepass` |
-| OpenClaw | `~/aidy/secrets/oa_redis_password.txt` | 拼 `OA_REDIS_URL` |
+| Redis 服务 | `~/xa-redis/secrets/redis_password.txt` | `--requirepass` |
+| OpenClaw | `~/xa/secrets/oa_redis_password.txt` | 拼 `OA_REDIS_URL` |
 
-**禁止** `ln -s`、禁止把 Gateway 的 `secrets.file` 指到 `~/aidy-redis/...`。内容可以对齐，地址必须分开。
+**禁止** `ln -s`、禁止把 Gateway 的 `secrets.file` 指到 `~/xa-redis/...`。内容可以对齐，地址必须分开。
 
 ```bash
-mkdir -p ~/aidy-redis/{redis-data,secrets}
-mkdir -p ~/aidy/secrets
+mkdir -p ~/xa-redis/{redis-data,secrets}
+mkdir -p ~/xa/secrets
 
 # 一次性在 shell 里生成值，分别写入两边；不要互相 ln / cp 后当「同一文件」用
 REDIS_PASS="$(openssl rand -hex 24)"
-printf '%s' "$REDIS_PASS" > ~/aidy-redis/secrets/redis_password.txt
-printf '%s' "$REDIS_PASS" > ~/aidy/secrets/oa_redis_password.txt
+printf '%s' "$REDIS_PASS" > ~/xa-redis/secrets/redis_password.txt
+printf '%s' "$REDIS_PASS" > ~/xa/secrets/oa_redis_password.txt
 unset REDIS_PASS
 
-chmod 600 ~/aidy-redis/secrets/redis_password.txt ~/aidy/secrets/oa_redis_password.txt
-sudo chown -R 1000:1000 ~/aidy-redis
-sudo chown 1000:1000 ~/aidy/secrets/oa_redis_password.txt
+chmod 600 ~/xa-redis/secrets/redis_password.txt ~/xa/secrets/oa_redis_password.txt
+sudo chown -R 1000:1000 ~/xa-redis
+sudo chown 1000:1000 ~/xa/secrets/oa_redis_password.txt
 ```
 
 密码用 hex，避免 URL 里出现 `@` `:` `/` `+` `=`。不要提交 git，不要写进 `openclaw.json`。
@@ -142,12 +142,12 @@ sudo chown 1000:1000 ~/aidy/secrets/oa_redis_password.txt
 
 ```bash
 # 两条路径，两个 inode；都不应是 symbolic link
-stat -c '%n %F %i' ~/aidy-redis/secrets/redis_password.txt ~/aidy/secrets/oa_redis_password.txt
+stat -c '%n %F %i' ~/xa-redis/secrets/redis_password.txt ~/xa/secrets/oa_redis_password.txt
 ```
 
 ### 3.2 Redis 启动脚本
 
-`~/aidy-redis/redis-entrypoint.sh`：
+`~/xa-redis/redis-entrypoint.sh`：
 
 ```sh
 #!/bin/sh
@@ -166,8 +166,8 @@ exec redis-server \
 ```
 
 ```bash
-chmod 755 ~/aidy-redis/redis-entrypoint.sh
-sudo chown 1000:1000 ~/aidy-redis/redis-entrypoint.sh
+chmod 755 ~/xa-redis/redis-entrypoint.sh
+sudo chown 1000:1000 ~/xa-redis/redis-entrypoint.sh
 ```
 
 说明：
@@ -183,13 +183,13 @@ sudo chown 1000:1000 ~/aidy-redis/redis-entrypoint.sh
 
 ### 3.3 Redis compose（只含 Redis）
 
-`~/aidy-redis/docker-compose.yml`：
+`~/xa-redis/docker-compose.yml`：
 
 ```yaml
 services:
-  aidy-redis:
+  xa-redis:
     image: redis:7.4-alpine
-    container_name: aidy-redis
+    container_name: xa-redis
     restart: unless-stopped
     logging:
       driver: json-file
@@ -203,7 +203,7 @@ services:
       - ./redis-entrypoint.sh:/redis-entrypoint.sh:ro
     entrypoint: ["/bin/sh", "/redis-entrypoint.sh"]
     networks:
-      - aidy-shared
+      - xa-shared
     healthcheck:
       # 已包含 AUTH + PING；compose ps 为 healthy 即通过，不必再手搓 redis-cli
       test: ["CMD-SHELL", "redis-cli -a \"$(tr -d '\\n' < /run/secrets/redis_password)\" ping | grep PONG"]
@@ -216,8 +216,8 @@ services:
       - "127.0.0.1:6379:6379"
 
 networks:
-  aidy-shared:
-    name: aidy-shared
+  xa-shared:
+    name: xa-shared
     driver: bridge
 
 secrets:
@@ -234,7 +234,7 @@ secrets:
 健康检查已经在做「带密码的 `PING`」。启动后只看状态，**不要**再 `exec redis-cli PING` 重复验一次。
 
 ```bash
-cd ~/aidy-redis
+cd ~/xa-redis
 docker compose pull
 docker compose up -d
 docker compose ps
@@ -244,39 +244,39 @@ docker compose ps
 `starting` 会持续到第一次检查成功（最多约 `start_period` + `retries × interval`）。一直不是 `healthy` 时看检查日志，而不是另开一条 PING：
 
 ```bash
-docker inspect --format '{{.State.Health.Status}} {{.State.Health.Log}}' aidy-redis
-docker compose logs --tail 50 aidy-redis
+docker inspect --format '{{.State.Health.Status}} {{.State.Health.Log}}' xa-redis
+docker compose logs --tail 50 xa-redis
 ```
 
 确认网络已创建：
 
 ```bash
-docker network inspect aidy-shared --format '{{.Name}} {{len .Containers}}'
+docker network inspect xa-shared --format '{{.Name}} {{len .Containers}}'
 ```
 
 ---
 
-## 4. OpenClaw 只做连接（`~/aidy`）
+## 4. OpenClaw 只做连接（`~/xa`）
 
-**不要**在 `~/aidy/docker-compose.yml` 里再声明 `aidy-redis` 服务，也不要 `depends_on: aidy-redis`（跨 compose 项目找不到对方服务）。启动顺序靠运维：先 Redis，再 Gateway。
+**不要**在 `~/xa/docker-compose.yml` 里再声明 `xa-redis` 服务，也不要 `depends_on: xa-redis`（跨 compose 项目找不到对方服务）。启动顺序靠运维：先 Redis，再 Gateway。
 
 Gateway 侧的 compose 增量、entrypoint 整文件、OA 凭据 secrets、主进程注入校验、启停命令写在 OA 接入手册（本文不重复 YAML，避免两处漂移）：
 
 **[OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA Workflow Bridge（Redis）接入手册.md) 第 5.5 节**
 
-前置：第 3.1 节已分别写好两边 Redis 密码文件。`oa_redis_password` 的 `file:` 只能是 `./secrets/oa_redis_password.txt`（即 `~/aidy/secrets/`），**不要**指向 `~/aidy-redis/`。
+前置：第 3.1 节已分别写好两边 Redis 密码文件。`oa_redis_password` 的 `file:` 只能是 `./secrets/oa_redis_password.txt`（即 `~/xa/secrets/`），**不要**指向 `~/xa-redis/`。
 
 ### 4.1 启停顺序
 
 先 Redis `up`，再 Gateway `up`。只停应用时不要 `down` Redis。完整命令与 Gateway 必须 `down && up`（只 `restart` 不够）见 OA 接入手册 **5.5.3**。
 
-`cd ~/aidy && docker compose down` **不会**停 `~/aidy-redis`，这是预期。
+`cd ~/xa && docker compose down` **不会**停 `~/xa-redis`，这是预期。
 
 ---
 
 ## 5. 生产机 / 云 Redis 怎么接
 
-本机跑通后，上生产通常 **不再部署 `~/aidy-redis` 容器**，改为连已有 Redis。
+本机跑通后，上生产通常 **不再部署 `~/xa-redis` 容器**，改为连已有 Redis。
 
 ### 5.1 独立 Linux 虚拟机（自建单主）
 
@@ -289,7 +289,7 @@ Gateway 侧的 compose 增量、entrypoint 整文件、OA 凭据 secrets、主�
 export OA_REDIS_URL="redis://:${REDIS_PASS}@10.20.30.40:6379/0"
 ```
 
-容器要能路由到该 IP（同一 VPC，或宿主机网络）。**不要**再加入 `aidy-shared` 去找 `aidy-redis` 这个名字。
+容器要能路由到该 IP（同一 VPC，或宿主机网络）。**不要**再加入 `xa-shared` 去找 `xa-redis` 这个名字。
 
 ### 5.2 云托管 Redis（阿里云 / 腾讯云等）
 
@@ -328,7 +328,7 @@ Redis 起来之后，Gateway 加载 OA 桥接插件。插件拷贝、`openclaw.j
 
 **[OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA Workflow Bridge（Redis）接入手册.md)**
 
-Docker 凭据由 `oa-workflow-bridge-redis/src/secret-resolver.mjs` 读 `OA_API_USER_ID` / `OA_APP_SECRET`（见 OA 接入手册第 5.5 节）。未注入时预检和 `prepare` 一律 `NOT_CONFIGURED`，**不会**回退 PowerShell、DPAPI 或任何映射文件。身份映射权威是 Redis `idmap`（现网 `requesterSenderId` 为加密 userid；见 `OA_tool/企微到OA身份与数据流.md`）。加密 userid → 明文 → OA 工号对齐由独立适配器写 `idmap`（STRING + EX），桥接只 GET。不要在桥接 `oa-client.mjs` 里调企微或 `getHrmUserInfoWithPage`。提交前 `getHrmSimpleInfo` 是建单链，见 `Aidy 现网加固与演进全景.md` 第 7 节。设计见 `OA_tool/身份适配器说明.md`。`idmap` 可设 EX；`pending` 带宽限 `PX` 兜底回收（过期判定仍看 JSON `expiresAt`）；`ledger` / `idx` 仍然禁止 Redis TTL。
+Docker 凭据由 `oa-workflow-bridge-redis/src/secret-resolver.mjs` 读 `OA_API_USER_ID` / `OA_APP_SECRET`（见 OA 接入手册第 5.5 节）。未注入时预检和 `prepare` 一律 `NOT_CONFIGURED`，**不会**回退 PowerShell、DPAPI 或任何映射文件。身份映射权威是 Redis `idmap`（现网 `requesterSenderId` 为加密 userid；见 `OA_tool/企微到OA身份与数据流.md`）。加密 userid → 明文 → OA 工号对齐由独立适配器写 `idmap`（STRING + EX），桥接只 GET。不要在桥接 `oa-client.mjs` 里调企微或 `getHrmUserInfoWithPage`。提交前 `getHrmSimpleInfo` 是建单链，见 `xA 现网加固与演进全景.md` 第 7 节。设计见 `OA_tool/身份适配器说明.md`。`idmap` 可设 EX；`pending` 带宽限 `PX` 兜底回收（过期判定仍看 JSON `expiresAt`）；`ledger` / `idx` 仍然禁止 Redis TTL。
 
 上线闸门（**不要**把 Redis「已通」当成 `prepare` 已通或可以忽略 npm 依赖）：
 
@@ -350,7 +350,7 @@ Docker 凭据由 `oa-workflow-bridge-redis/src/secret-resolver.mjs` 读 `OA_API_
 
 本机 `maxmemory 256mb` 足够试点。生产按 ledger 条数估算：单条通常数 KB，10 万条也远小于 256mb。仍建议监控 `used_memory`，满了 **加内存**，不要改成 `allkeys-lru`。ledger 防的是同一 `IT-…` 再打 OA（见 OA Redis 手册 3.3），不是按人冷却。
 
-数据目录 `~/aidy-redis/redis-data` 必须在 Linux 文件系统上（家目录），不要放 `/mnt/c`。
+数据目录 `~/xa-redis/redis-data` 必须在 Linux 文件系统上（家目录），不要放 `/mnt/c`。
 
 ---
 
@@ -358,12 +358,12 @@ Docker 凭据由 `oa-workflow-bridge-redis/src/secret-resolver.mjs` 读 `OA_API_
 
 | 目标 | Redis 实例 | database | keyPrefix | Gateway |
 | --- | --- | --- | --- | --- |
-| 单套 IT | 1 | `/0` | `oa-bridge-aidy-it` | 1 |
+| 单套 IT | 1 | `/0` | `oa-bridge-xa-it` | 1 |
 | IT + HR 共用 Redis | 1 | `/0` `/1` | 各业务不同 | 每业务 1 |
 | 生产 / 预发强隔离 | 2 套实例 | 各自 `/0` | 可同名 | 各 1 |
 | 同业务多副本 | 1 | 相同 | 相同 | 多，但企微 Bot **单活**；附件卷必须共享 |
 
-HR 示例：`OA_REDIS_URL=...@aidy-redis:6379/1`，`keyPrefix` 改为 `oa-bridge-aidy-hr`。
+HR 示例：`OA_REDIS_URL=...@xa-redis:6379/1`，`keyPrefix` 改为 `oa-bridge-xa-hr`。
 
 同一企微 Bot **不能**两套 Gateway 同时在线。多副本还要把 staging 做成共享卷，否则 confirm 落到另一实例会找不到附件。
 
@@ -375,13 +375,13 @@ HR 示例：`OA_REDIS_URL=...@aidy-redis:6379/1`，`keyPrefix` 改为 `oa-bridge
 
 ```bash
 # 建议先停 Gateway，减少写入
-cd ~/aidy && docker compose stop
+cd ~/xa && docker compose stop
 
-cd ~/aidy-redis
-docker compose exec -T aidy-redis \
+cd ~/xa-redis
+docker compose exec -T xa-redis \
   redis-cli -a "$(tr -d '\n' < ./secrets/redis_password.txt)" BGSAVE
 # 或直接拷数据目录（仍建议 Redis 已 SAVE）
-tar -C ~ -czf "aidy-redis-$(date +%Y%m%d).tar.gz" aidy-redis/redis-data aidy-redis/secrets
+tar -C ~ -czf "xa-redis-$(date +%Y%m%d).tar.gz" xa-redis/redis-data xa-redis/secrets
 ```
 
 云 Redis 用控制台自动备份，不必拷容器目录。
@@ -398,27 +398,27 @@ tar -C ~ -czf "aidy-redis-$(date +%Y%m%d).tar.gz" aidy-redis/redis-data aidy-red
 NEW_PASS="$(openssl rand -hex 24)"
 
 # 1）Redis 机器
-printf '%s' "$NEW_PASS" > ~/aidy-redis/secrets/redis_password.txt
-chmod 600 ~/aidy-redis/secrets/redis_password.txt
-sudo chown 1000:1000 ~/aidy-redis/secrets/redis_password.txt
-cd ~/aidy-redis && docker compose down && docker compose up -d
+printf '%s' "$NEW_PASS" > ~/xa-redis/secrets/redis_password.txt
+chmod 600 ~/xa-redis/secrets/redis_password.txt
+sudo chown 1000:1000 ~/xa-redis/secrets/redis_password.txt
+cd ~/xa-redis && docker compose down && docker compose up -d
 
 # 2）应用机器（另一路径）
-printf '%s' "$NEW_PASS" > ~/aidy/secrets/oa_redis_password.txt
-chmod 600 ~/aidy/secrets/oa_redis_password.txt
-sudo chown 1000:1000 ~/aidy/secrets/oa_redis_password.txt
-cd ~/aidy && docker compose down && docker compose up -d
+printf '%s' "$NEW_PASS" > ~/xa/secrets/oa_redis_password.txt
+chmod 600 ~/xa/secrets/oa_redis_password.txt
+sudo chown 1000:1000 ~/xa/secrets/oa_redis_password.txt
+cd ~/xa && docker compose down && docker compose up -d
 
 unset NEW_PASS
 ```
 
-云 Redis：控制台改密（Redis 侧）→ 再改 `~/aidy/secrets/oa_redis_password.txt` → 只重建 Gateway。
+云 Redis：控制台改密（Redis 侧）→ 再改 `~/xa/secrets/oa_redis_password.txt` → 只重建 Gateway。
 
 只 `restart` **不够**：entrypoint / Redis `--requirepass` 在创建容器时读各自的 secret。
 
 ### 9.4 本机测试：一次性清空业务 key（`FLUSHDB`）
 
-只用于 **工位 `~/aidy-redis` 测试库**。测了很多轮之后，`ledger` / `idx` 没有 TTL，会一直堆着；`FLUSHDB` 一次清掉当前库（本项目是 `/0`）里的全部 key。
+只用于 **工位 `~/xa-redis` 测试库**。测了很多轮之后，`ledger` / `idx` 没有 TTL，会一直堆着；`FLUSHDB` 一次清掉当前库（本项目是 `/0`）里的全部 key。
 
 **生产、预发、云 Redis、以及已经有真实员工单的实例不要做。** 不要用 `FLUSHALL`（会把其它 `database` 一并清掉）。不要批量 `DEL *:ledger:*` 当「半清」。
 
@@ -430,26 +430,26 @@ unset NEW_PASS
 
 ```bash
 # 1）停 Gateway（Redis 保持 up）
-cd ~/aidy && docker compose stop
+cd ~/xa && docker compose stop
 
 # 2）看当前有多少条（本机测试）
-cd ~/aidy-redis
-docker compose exec -T aidy-redis \
+cd ~/xa-redis
+docker compose exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DBSIZE'
 
 # 3）清空 db0
-docker compose exec -T aidy-redis \
+docker compose exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 FLUSHDB'
 
 # 4）核对，应返回 0
-docker compose exec -T aidy-redis \
+docker compose exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DBSIZE'
 
 # 5）再起 Gateway
-cd ~/aidy && docker compose start
+cd ~/xa && docker compose start
 ```
 
-`FLUSHDB` 会写入 AOF，Redis 重启后仍是空库。不要为了清空去删 `~/aidy-redis/redis-data/`。
+`FLUSHDB` 会写入 AOF，Redis 重启后仍是空库。不要为了清空去删 `~/xa-redis/redis-data/`。
 
 #### 清完之后
 
@@ -470,32 +470,32 @@ cd ~/aidy && docker compose start
 
 ```bash
 # Redis：存活看 compose ps 的 healthy，不要再 PING
-cd ~/aidy-redis
+cd ~/xa-redis
 docker compose ps
-docker compose exec -T aidy-redis \
+docker compose exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" INFO persistence'
-docker compose exec -T aidy-redis \
+docker compose exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" CONFIG GET maxmemory-policy'
 # 期望：noeviction
 
 # Gateway 已加载 Redis 版插件
-docker exec -it aidy-gateway node dist/index.js plugins list
+docker exec -it xa-gateway node dist/index.js plugins list
 # 有 oa-workflow-bridge-redis enabled
 
-docker logs aidy-gateway 2>&1 | grep oa-workflow-bridge-redis
+docker logs xa-gateway 2>&1 | grep oa-workflow-bridge-redis
 # [oa-workflow-bridge-redis] loaded (Redis state) from ...
 
 # 只读预检（OA 凭据配好后；不会建单）
-docker exec -it aidy-gateway node \
+docker exec -it xa-gateway node \
   /home/node/.openclaw/extensions/oa-workflow-bridge-redis/scripts/readonly-preflight.mjs
 ```
 
 有工单操作后，用已知工单号点查（不要对生产做 `KEYS`）：
 
 ```bash
-cd ~/aidy-redis
-docker compose exec -T aidy-redis \
-  sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-bridge-aidy-it:ledger:IT-20260805-121500-A1B2"'
+cd ~/xa-redis
+docker compose exec -T xa-redis \
+  sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-bridge-xa-it:ledger:IT-20260805-121500-A1B2"'
 ```
 
 ---
@@ -504,9 +504,9 @@ docker compose exec -T aidy-redis \
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| Gateway 日志 `Redis init failed` | URL / 密码 / 网络 | 先看 Redis `compose ps` 是否 `healthy`；确认 Gateway 在 `aidy-shared`；主机名是 `aidy-redis` 不是 `127.0.0.1` |
-| `network aidy-shared declared as external, but could not be found` | Redis compose 未先 up | 先 `cd ~/aidy-redis && docker compose up -d` |
-| `NOAUTH` / `WRONGPASS` | 两边密码文件内容不一致，或 URL 未编码 | 分别核对 `~/aidy-redis/secrets/redis_password.txt` 与 `~/aidy/secrets/oa_redis_password.txt`；应用 hex；不要靠 symlink 对齐 |
+| Gateway 日志 `Redis init failed` | URL / 密码 / 网络 | 先看 Redis `compose ps` 是否 `healthy`；确认 Gateway 在 `xa-shared`；主机名是 `xa-redis` 不是 `127.0.0.1` |
+| `network xa-shared declared as external, but could not be found` | Redis compose 未先 up | 先 `cd ~/xa-redis && docker compose up -d` |
+| `NOAUTH` / `WRONGPASS` | 两边密码文件内容不一致，或 URL 未编码 | 分别核对 `~/xa-redis/secrets/redis_password.txt` 与 `~/xa/secrets/oa_redis_password.txt`；应用 hex；不要靠 symlink 对齐 |
 | 插件未出现在 list | allow / path 不是 `oa-workflow-bridge-redis` | 改 `openclaw.json` 并 `down && up` |
 | `OA bridge Redis store is not ready` | 启动时 Redis 未就绪 | 等 healthy 后重试工具调用 |
 | `NOT_CONFIGURED` / 缺 OA 凭据 | 未注入 `OA_API_USER_ID` / `OA_APP_SECRET`。插件不回退 DPAPI | 按 OA 接入手册第 5.5 节补 secret / volume / entrypoint 后 `down && up` |
@@ -524,7 +524,7 @@ docker compose exec -T aidy-redis \
 - 不要把 Redis 密码写入 `openclaw.json`
 - 不要把 OA AppSecret、API User ID 写入 `openclaw.json`（走 `/run/secrets` + 环境变量）
 - 不要把身份映射文件挂进 workspace 或 `.openclaw`
-- 不要用 `ln -s` 或把 Gateway `secrets.file` 指到 `~/aidy-redis/`，让两边共用同一密码文件
+- 不要用 `ln -s` 或把 Gateway `secrets.file` 指到 `~/xa-redis/`，让两边共用同一密码文件
 - 不要对生产执行 `FLUSHDB` / `FLUSHALL`（本机测试清空见第 9.4 节）
 - 不要批量删除 `*:ledger:*`
 - 不要把 `maxmemory-policy` 设成会淘汰 key 的策略
@@ -541,7 +541,7 @@ docker compose exec -T aidy-redis \
 | --- | --- |
 | `OA_tool/OA Workflow Bridge（Redis）接入手册.md` | 插件架构、Key、工具 API；Gateway compose / entrypoint 见该手册 5.5 |
 | `OA_tool/OA插件与Redis链路.md` | OA 插件 × Redis 节点图、hop、五 action 点查 key |
-| `Aidy 现网加固与演进全景.md` | OA 主路径、切入范围；Redis 在链路中的位置 |
+| `xA 现网加固与演进全景.md` | OA 主路径、切入范围；Redis 在链路中的位置 |
 | `OA_tool/企微到OA身份与数据流.md` | Redis `idmap`；加密 userid 与适配器 |
 | `OA_tool/身份适配器说明.md` | miss 路径：`idmap` 由适配器写（STRING + EX；已验证）；ledger 仍禁止 TTL |
 | `外部系统 Tool 插件设计规范.md` | 固定 action、可信上下文、两阶段确认、Docker 凭据 |

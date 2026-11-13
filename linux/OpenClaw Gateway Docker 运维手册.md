@@ -102,7 +102,7 @@
 
 ### 适用对象与边界
 
-适用对象：已按 **[OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md)** 或 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md)** 跑通 Aidy OpenClaw Gateway，需要做日常启停、巡检、备份、升级、排障的工程师。
+适用对象：已按 **[OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md)** 或 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md)** 跑通 xA OpenClaw Gateway，需要做日常启停、巡检、备份、升级、排障的工程师。
 
 - **做：** 容器启停、健康检查、日志、巡检、备份恢复、密钥轮换、镜像/插件升级、磁盘与自愈、三层排障。
 - **不做：** 第一次部署、重装、换机器。那些走安装检查清单，不要用本文巡检清单代替。
@@ -131,14 +131,14 @@ Linux 服务器环境**跳过**以下 WSL / Windows 专属小节：
 
 | 项 | 值 |
 | --- | --- |
-| 工作目录 | `~/aidy`（必须在 Linux 家目录，不要放 `/mnt/c`） |
-| 容器名 | `aidy-gateway` |
+| 工作目录 | `~/xa`（必须在 Linux 家目录，不要放 `/mnt/c`） |
+| 容器名 | `xa-gateway` |
 | 镜像 | 默认 `openclaw/openclaw:latest`。本机若只有 `ghcr.io/openclaw/openclaw:latest`（安装手册方案 A 未 tag，或 yml 已写 ghcr），装依赖与 `image inspect` 都用那一串；`docker images` 没有 `openclaw/openclaw` 时不要去 Docker Hub 补拉。完整两条命令见 OA Redis 接入手册 4.2。生产建议钉版本，见 [第 8 节](#sec-08) |
 | 网关端口 | 宿主 `18789` → 容器 `18789` |
 | 健康检查 URL | `http://127.0.0.1:18789/healthz` |
-| 容器内 CLI | `docker exec -it aidy-gateway node dist/index.js <子命令>` |
+| 容器内 CLI | `docker exec -it xa-gateway node dist/index.js <子命令>` |
 
-第二套业务把目录、容器名、端口换成 `~/aidy-hr`、`aidy-hr-gateway`、`18790`，命令结构相同。启用了 Redis 版 OA 时，Redis 在 **独立 compose** `~/aidy-redis`（容器名仍为 `aidy-redis`），见 [Redis 独立实例部署手册.md](Redis%20独立实例部署手册.md)。文中已标明「仅 Redis 环境」。
+第二套业务把目录、容器名、端口换成 `~/xa-hr`、`xa-hr-gateway`、`18790`，命令结构相同。启用了 Redis 版 OA 时，Redis 在 **独立 compose** `~/xa-redis`（容器名仍为 `xa-redis`），见 [Redis 独立实例部署手册.md](Redis%20独立实例部署手册.md)。文中已标明「仅 Redis 环境」。
 
 <a id="notes" name="notes"></a>
 
@@ -197,10 +197,10 @@ Linux 服务器环境**跳过**以下 WSL / Windows 专属小节：
 
 ## 2. 日常启停
 
-所有 compose 命令必须在 **`~/aidy`** 下执行（该目录要有 `docker-compose.yml`）。
+所有 compose 命令必须在 **`~/xa`** 下执行（该目录要有 `docker-compose.yml`）。
 
 ```bash
-cd ~/aidy
+cd ~/xa
 
 # 启动（已存在则跳过，不存在则创建）
 docker compose up -d
@@ -211,9 +211,9 @@ docker compose ps -a
 
 # 只重启 Gateway（不重建容器，secret / yml 改过之后不够）
 docker compose restart
-docker compose restart aidy-gateway
+docker compose restart xa-gateway
 
-# 停止并删除容器（不删镜像、不删 ~/aidy 数据）
+# 停止并删除容器（不删镜像、不删 ~/xa 数据）
 docker compose down
 
 # 停止但不删容器（少用；日常用 down 或 restart 即可）
@@ -225,20 +225,20 @@ docker compose start
 
 | 你改了什么 | 用哪条 |
 | --- | --- |
-| 只想让进程重新读已挂载的 `openclaw.json`（多数热重载字段） | 可先等热重载；不生效再 `docker compose restart aidy-gateway` |
+| 只想让进程重新读已挂载的 `openclaw.json`（多数热重载字段） | 可先等热重载；不生效再 `docker compose restart xa-gateway` |
 | `plugins.load.paths`、`gateway.port` / `bind`、entrypoint、compose 的 `secrets:` / `volumes:` | `docker compose down && docker compose up -d` |
-| `~/aidy/secrets/*.txt` 内容 | **必须** `docker compose down && docker compose up -d`（环境变量在进程启动时注入） |
+| `~/xa/secrets/*.txt` 内容 | **必须** `docker compose down && docker compose up -d`（环境变量在进程启动时注入） |
 | 只看日志 | `docker compose logs` / `docker logs`，不要重启 |
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose down
 docker compose up -d
 docker compose ps
 curl -sS http://127.0.0.1:18789/healthz
 ```
 
-期望：`aidy-gateway` 为 `Up` 或 `Up (healthy)`，`/healthz` 返回含 `"ok":true` 的 JSON。仓库 [`docker/docker-compose.yml`](docker/docker-compose.yml) **已含** `healthcheck`；安装手册初装生成的 compose 若还没有，见[第 13 节](#sec-13)。
+期望：`xa-gateway` 为 `Up` 或 `Up (healthy)`，`/healthz` 返回含 `"ok":true` 的 JSON。仓库 [`docker/docker-compose.yml`](docker/docker-compose.yml) **已含** `healthcheck`；安装手册初装生成的 compose 若还没有，见[第 13 节](#sec-13)。
 
 [← 1. 先分清两份清单](#sec-01) · [↑ 目录](#toc) · [下一节 → 3. 健康检查命令包](#sec-03)
 
@@ -294,19 +294,19 @@ systemctl is-active docker
 ### 3.3 容器与端口
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose ps -a
-docker inspect -f '{{.State.Status}} {{.State.RestartCount}} {{.State.ExitCode}} {{.State.Error}}' aidy-gateway
+docker inspect -f '{{.State.Status}} {{.State.RestartCount}} {{.State.ExitCode}} {{.State.Error}}' xa-gateway
 ss -lnt | grep 18789 || netstat -lnt | grep 18789
-curl -sS -o /tmp/aidy-healthz.json -w 'HTTP %{http_code}\n' http://127.0.0.1:18789/healthz
-cat /tmp/aidy-healthz.json; echo
+curl -sS -o /tmp/xa-healthz.json -w 'HTTP %{http_code}\n' http://127.0.0.1:18789/healthz
+cat /tmp/xa-healthz.json; echo
 ```
 
 成功标准：
 
 | 项 | 期望 |
 | --- | --- |
-| `compose ps` | `aidy-gateway` 为 `Up`，不在 `Restarting` / `Exited` |
+| `compose ps` | `xa-gateway` 为 `Up`，不在 `Restarting` / `Exited` |
 | RestartCount | 刚启动后可以是 0～1；持续增加说明崩溃循环 |
 | `curl` | `HTTP 200`，JSON 含 `"ok":true` |
 | 端口 | 有进程监听 `18789` |
@@ -314,7 +314,7 @@ cat /tmp/aidy-healthz.json; echo
 Windows 浏览器再打开 `http://localhost:18789/`。Dashboard 的 token：
 
 ```bash
-cat ~/aidy/secrets/gateway_token.txt; echo
+cat ~/xa/secrets/gateway_token.txt; echo
 ```
 
 <a id="sec-03-4" name="sec-03-4"></a>
@@ -322,31 +322,31 @@ cat ~/aidy/secrets/gateway_token.txt; echo
 ### 3.4 OpenClaw 自身状态
 
 ```bash
-docker exec -it aidy-gateway node dist/index.js gateway status --deep
-docker exec -it aidy-gateway node dist/index.js config validate
-docker exec -it aidy-gateway node dist/index.js agents list --bindings
-docker exec -it aidy-gateway node dist/index.js plugins list
-docker exec -it aidy-gateway node dist/index.js channels list
-docker exec -it aidy-gateway node dist/index.js channels status --channel wecom --probe
-docker exec -it aidy-gateway node dist/index.js models status
+docker exec -it xa-gateway node dist/index.js gateway status --deep
+docker exec -it xa-gateway node dist/index.js config validate
+docker exec -it xa-gateway node dist/index.js agents list --bindings
+docker exec -it xa-gateway node dist/index.js plugins list
+docker exec -it xa-gateway node dist/index.js channels list
+docker exec -it xa-gateway node dist/index.js channels status --channel wecom --probe
+docker exec -it xa-gateway node dist/index.js models status
 ```
 
 `config validate` 若报 `Missing env var`，用下面这一组（从宿主机 secret 注入，**不会**把真值写进 json）：
 
 ```bash
 docker exec -it \
-  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/aidy/secrets/gateway_token.txt)" \
-  -e AIDY_IT_WECOM_BOT_ID="$(tr -d '\n' < ~/aidy/secrets/wecom_bot_id.txt)" \
-  -e AIDY_IT_WECOM_BOT_SECRET="$(tr -d '\n' < ~/aidy/secrets/wecom_bot_secret.txt)" \
-  -e AIDY_DOMESTIC_API_KEY="$(tr -d '\n' < ~/aidy/secrets/model_api_key.txt)" \
-  -e AIDY_DOMESTIC_BASE_URL="$(tr -d '\n' < ~/aidy/secrets/model_base_url.txt)" \
-  -e AIDY_DOMESTIC_MODEL_ID="$(tr -d '\n' < ~/aidy/secrets/model_id.txt)" \
-  -e AIDY_DOMESTIC_MODEL_REF="$(tr -d '\n' < ~/aidy/secrets/model_ref.txt)" \
-  -e AIDY_DOMESTIC_API="$(tr -d '\n' < ~/aidy/secrets/model_api.txt)" \
-  aidy-gateway node dist/index.js config validate
+  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/xa/secrets/gateway_token.txt)" \
+  -e XA_IT_WECOM_BOT_ID="$(tr -d '\n' < ~/xa/secrets/wecom_bot_id.txt)" \
+  -e XA_IT_WECOM_BOT_SECRET="$(tr -d '\n' < ~/xa/secrets/wecom_bot_secret.txt)" \
+  -e XA_DOMESTIC_API_KEY="$(tr -d '\n' < ~/xa/secrets/model_api_key.txt)" \
+  -e XA_DOMESTIC_BASE_URL="$(tr -d '\n' < ~/xa/secrets/model_base_url.txt)" \
+  -e XA_DOMESTIC_MODEL_ID="$(tr -d '\n' < ~/xa/secrets/model_id.txt)" \
+  -e XA_DOMESTIC_MODEL_REF="$(tr -d '\n' < ~/xa/secrets/model_ref.txt)" \
+  -e XA_DOMESTIC_API="$(tr -d '\n' < ~/xa/secrets/model_api.txt)" \
+  xa-gateway node dist/index.js config validate
 ```
 
-阶段 A 还没有模型 5 个 secret 时，去掉对应的 `-e AIDY_DOMESTIC_*` 行。
+阶段 A 还没有模型 5 个 secret 时，去掉对应的 `-e XA_DOMESTIC_*` 行。
 
 成功标准：
 
@@ -364,8 +364,8 @@ docker exec -it \
 ### 3.5 启动日志（主进程是否真的健康）
 
 ```bash
-docker logs --tail 120 --timestamps aidy-gateway
-docker logs aidy-gateway 2>&1 | grep -E 'agent model|Invalid config|breaker tripped|autostart suppressed|listening|bind' || true
+docker logs --tail 120 --timestamps xa-gateway
+docker logs xa-gateway 2>&1 | grep -E 'agent model|Invalid config|breaker tripped|autostart suppressed|listening|bind' || true
 ```
 
 期望看到类似：
@@ -394,7 +394,7 @@ unknown channel id: wecom
 ```bash
 bash <<'EOF'
 set -u
-cd "${HOME}/aidy" || { echo "FAIL: ~/aidy 不存在"; exit 1; }
+cd "${HOME}/xa" || { echo "FAIL: ~/xa 不存在"; exit 1; }
 
 echo "===== 1. Docker / compose ====="
 systemctl is-active docker || echo "FAIL: docker 未 active"
@@ -402,10 +402,10 @@ docker compose ps || true
 
 echo
 echo "===== 2. 容器状态 ====="
-if docker inspect aidy-gateway >/dev/null 2>&1; then
-  docker inspect -f 'Status={{.State.Status}} RestartCount={{.State.RestartCount}} ExitCode={{.State.ExitCode}}' aidy-gateway
+if docker inspect xa-gateway >/dev/null 2>&1; then
+  docker inspect -f 'Status={{.State.Status}} RestartCount={{.State.RestartCount}} ExitCode={{.State.ExitCode}}' xa-gateway
 else
-  echo "FAIL: 容器 aidy-gateway 不存在"
+  echo "FAIL: 容器 xa-gateway 不存在"
 fi
 
 echo
@@ -418,18 +418,18 @@ fi
 
 echo
 echo "===== 4. 磁盘与权限 ====="
-df -h "${HOME}/aidy"
+df -h "${HOME}/xa"
 echo -n "secrets 权限: "
-stat -c '%a %n' "${HOME}/aidy/secrets"/*.txt 2>/dev/null || echo "无 secrets 文件"
-test -f "${HOME}/aidy/workspace/MEMORY.md" && echo "MEMORY.md: OK" || echo "FAIL: 缺少 ~/aidy/workspace/MEMORY.md"
+stat -c '%a %n' "${HOME}/xa/secrets"/*.txt 2>/dev/null || echo "无 secrets 文件"
+test -f "${HOME}/xa/workspace/MEMORY.md" && echo "MEMORY.md: OK" || echo "FAIL: 缺少 ~/xa/workspace/MEMORY.md"
 
 echo
 echo "===== 5. 启动日志关键行 ====="
-docker logs aidy-gateway 2>&1 | grep -E 'agent model|Invalid config|breaker tripped|autostart suppressed|plugin path not found' | tail -n 20 || true
+docker logs xa-gateway 2>&1 | grep -E 'agent model|Invalid config|breaker tripped|autostart suppressed|plugin path not found' | tail -n 20 || true
 
 echo
 echo "===== 6. 资源 ====="
-docker stats --no-stream aidy-gateway 2>/dev/null || true
+docker stats --no-stream xa-gateway 2>/dev/null || true
 docker system df
 
 echo
@@ -437,18 +437,18 @@ echo "===== 巡检脚本结束（OpenClaw CLI 请按第 3.4 节手动跑） ====
 EOF
 ```
 
-有 Redis 时在脚本后追加（独立 Redis 目录 `~/aidy-redis`）。健康检查已含带密码的 `PING`，日常看 `ps` 即可：
+有 Redis 时在脚本后追加（独立 Redis 目录 `~/xa-redis`）。健康检查已含带密码的 `PING`，日常看 `ps` 即可：
 
 ```bash
-docker compose -f ~/aidy-redis/docker-compose.yml ps aidy-redis
+docker compose -f ~/xa-redis/docker-compose.yml ps xa-redis
 # 期望：Up (healthy)
 ```
 
 只有 STATUS 不是 `healthy` 时，才看健康检查失败原因（不要用宿主机路径把密码再灌进 redis-cli）：
 
 ```bash
-docker inspect --format '{{.State.Health.Status}}' aidy-redis
-docker inspect --format '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}' aidy-redis
+docker inspect --format '{{.State.Health.Status}}' xa-redis
+docker inspect --format '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{end}}' xa-redis
 ```
 
 [← 2. 日常启停](#sec-02) · [↑ 目录](#toc) · [下一节 → 4. 日志](#sec-04)
@@ -464,29 +464,29 @@ docker inspect --format '{{range .State.Health.Log}}{{.ExitCode}} {{.Output}}{{e
 ### 4.1 常用查看命令
 
 ```bash
-cd ~/aidy
+cd ~/xa
 
 # 跟踪（Ctrl+C 只停跟踪，不停容器）
-docker compose logs -f aidy-gateway
-docker logs -f --timestamps aidy-gateway
+docker compose logs -f xa-gateway
+docker logs -f --timestamps xa-gateway
 
 # 最近 N 行
-docker logs --tail 80 --timestamps aidy-gateway
-docker compose logs --tail 80 aidy-gateway
+docker logs --tail 80 --timestamps xa-gateway
+docker compose logs --tail 80 xa-gateway
 
 # 按时间
-docker logs --since 30m --timestamps aidy-gateway
-docker logs --since 2026-08-31T00:00:00 --timestamps aidy-gateway
+docker logs --since 30m --timestamps xa-gateway
+docker logs --since 2026-08-31T00:00:00 --timestamps xa-gateway
 
 # 只看错误关键字
-docker logs --since 24h aidy-gateway 2>&1 | grep -Ei 'error|fatal|invalid|denied|breaker|unresolved|enoent|429'
+docker logs --since 24h xa-gateway 2>&1 | grep -Ei 'error|fatal|invalid|denied|breaker|unresolved|enoent|429'
 ```
 
 有 Redis：
 
 ```bash
-docker compose -f ~/aidy-redis/docker-compose.yml logs -f aidy-redis
-docker compose -f ~/aidy-redis/docker-compose.yml logs --tail 80 aidy-redis
+docker compose -f ~/xa-redis/docker-compose.yml logs -f xa-redis
+docker compose -f ~/xa-redis/docker-compose.yml logs --tail 80 xa-redis
 ```
 
 <a id="sec-04-2" name="sec-04-2"></a>
@@ -497,28 +497,28 @@ docker compose -f ~/aidy-redis/docker-compose.yml logs --tail 80 aidy-redis
 
 ```bash
 # 模型实际用了哪一个、思考开没开
-docker logs aidy-gateway 2>&1 | grep -E 'agent model'
+docker logs xa-gateway 2>&1 | grep -E 'agent model'
 
 # 模型调用耗时（elapsedMs 只是首包；体感看它后面多久出现 kind=final）
-docker logs --since 1h aidy-gateway 2>&1 | grep -E 'model-fetch|kind=final|elapsedMs|timeoutMs'
+docker logs --since 1h xa-gateway 2>&1 | grep -E 'model-fetch|kind=final|elapsedMs|timeoutMs'
 
 # 发图是否误走媒体理解（应接近 0ms 或不出现）
-docker logs --since 1h aidy-gateway 2>&1 | grep -E 'apply_media_understanding'
+docker logs --since 1h xa-gateway 2>&1 | grep -E 'apply_media_understanding'
 
 # 企微鉴权与收发
-docker logs --since 1h aidy-gateway 2>&1 | grep -Ei 'wecom|Authentication successful|Reply message sent|Reply ack|inbound|DM dropped'
+docker logs --since 1h xa-gateway 2>&1 | grep -Ei 'wecom|Authentication successful|Reply message sent|Reply ack|inbound|DM dropped'
 
 # 配置非法 / 崩溃循环
-docker logs aidy-gateway 2>&1 | grep -Ei 'Invalid config|meta: Invalid|breaker tripped|autostart suppressed|Restarting'
+docker logs xa-gateway 2>&1 | grep -Ei 'Invalid config|meta: Invalid|breaker tripped|autostart suppressed|Restarting'
 
 # 群聊 MEMORY.md 二次调用
-docker logs --since 24h aidy-gateway 2>&1 | grep -E 'MEMORY.md|ENOENT'
+docker logs --since 24h xa-gateway 2>&1 | grep -E 'MEMORY.md|ENOENT'
 
 # 模型找不到 / 占位符没注入
-docker logs aidy-gateway 2>&1 | grep -Ei 'Unknown model|unresolved|model_not_found|Missing env var'
+docker logs xa-gateway 2>&1 | grep -Ei 'Unknown model|unresolved|model_not_found|Missing env var'
 
 # OA 插件缺 npm 依赖（prepare 会失败，错误在 docker logs）
-docker logs --since 1h aidy-gateway 2>&1 | grep -E 'Cannot find package .redis.|Redis init failed'
+docker logs --since 1h xa-gateway 2>&1 | grep -E 'Cannot find package .redis.|Redis init failed'
 ```
 
 `oa_workflow` 的 `OA_IDENTITY_*` **不会**出现在 `docker logs`。员工说「还不能提交到 OA」时，到会话 jsonl 抽工具 `code`，完整命令见 `OA_tool/身份适配器说明.md` 第 10.7 节。不要 `cat` 整份 jsonl（含加密 userid）。
@@ -546,24 +546,24 @@ docker logs --since 1h aidy-gateway 2>&1 | grep -E 'Cannot find package .redis.|
 /var/lib/docker/containers/<容器ID>/<容器ID>-json.log
 ```
 
-轮转只管这份 stdout，**不管** `~/aidy` 里的会话 jsonl、`media/inbound`。改 `logging` 须 `down && up`，只 `restart` 不够。核对：
+轮转只管这份 stdout，**不管** `~/xa` 里的会话 jsonl、`media/inbound`。改 `logging` 须 `down && up`，只 `restart` 不够。核对：
 
 ```bash
-docker inspect -f '{{json .HostConfig.LogConfig}}' aidy-gateway
-docker inspect -f '{{json .HostConfig.LogConfig}}' aidy-redis
-docker inspect -f '{{.LogPath}}' aidy-gateway
-sudo ls -lh "$(docker inspect -f '{{.LogPath}}' aidy-gateway)"
+docker inspect -f '{{json .HostConfig.LogConfig}}' xa-gateway
+docker inspect -f '{{json .HostConfig.LogConfig}}' xa-redis
+docker inspect -f '{{.LogPath}}' xa-gateway
+sudo ls -lh "$(docker inspect -f '{{.LogPath}}' xa-gateway)"
 docker system df
 ```
 
-应看到 `max-size` / `max-file`。盘仍满：先看 jsonl 与两处 `media/inbound`（[第 10.4 节](#sec-10-4)），不要删 ledger。应急（会丢掉该容器已有日志，不删 `~/aidy`）：
+应看到 `max-size` / `max-file`。盘仍满：先看 jsonl 与两处 `media/inbound`（[第 10.4 节](#sec-10-4)），不要删 ledger。应急（会丢掉该容器已有日志，不删 `~/xa`）：
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose down
 # 确认没有业务写入后再清未用对象；不要加 -a 除非你知道在删什么
 docker container prune -f
-sudo sh -c 'truncate -s 0 "$(docker inspect -f "{{.LogPath}}" aidy-gateway)"' 2>/dev/null || true
+sudo sh -c 'truncate -s 0 "$(docker inspect -f "{{.LogPath}}" xa-gateway)"' 2>/dev/null || true
 docker compose up -d
 ```
 
@@ -581,11 +581,11 @@ docker compose up -d
 
 | # | 做什么 | 命令 | 成功标准 |
 | --- | --- | --- | --- |
-| 1 | 容器在跑 | `cd ~/aidy && docker compose ps` | `aidy-gateway` 为 `Up` |
+| 1 | 容器在跑 | `cd ~/xa && docker compose ps` | `xa-gateway` 为 `Up` |
 | 2 | 健康接口 | `curl -sS http://127.0.0.1:18789/healthz` | HTTP 200，`"ok":true` |
-| 3 | 没有崩溃循环 | `docker inspect -f '{{.State.RestartCount}}' aidy-gateway` | 数字不再持续增加 |
+| 3 | 没有崩溃循环 | `docker inspect -f '{{.State.RestartCount}}' xa-gateway` | 数字不再持续增加 |
 | 4 | 日志无致命关键字 | [第 4.2 节](#sec-04-2) `Invalid config` / `breaker` 那条 | 无匹配，或都是已处理的旧日志 |
-| 5 | 企微抽测（工作日） | 测试机器人发「你是谁」；同时 `docker logs -f --timestamps aidy-gateway` | 有 inbound，有 `Reply message sent` 与 `Reply ack received` |
+| 5 | 企微抽测（工作日） | 测试机器人发「你是谁」；同时 `docker logs -f --timestamps xa-gateway` | 有 inbound，有 `Reply message sent` 与 `Reply ack received` |
 
 未装企微时，第 5 步改成 Control UI 发一条，或只做 1～4。
 
@@ -595,25 +595,25 @@ docker compose up -d
 
 | # | 做什么 | 命令 | 成功标准 |
 | --- | --- | --- | --- |
-| 1 | 资源 | `docker stats --no-stream aidy-gateway` | 内存未长期顶满限额；CPU 不是持续 100% |
+| 1 | 资源 | `docker stats --no-stream xa-gateway` | 内存未长期顶满限额；CPU 不是持续 100% |
 | 2 | Docker 磁盘 | `docker system df` | Images / Containers / Logs 未异常膨胀 |
-| 3 | 工作区磁盘 | `du -sh ~/aidy ~/aidy/workspace ~/aidy/config` | 相对上周增长可解释 |
-| 3b | inbound 原件 | `du -sh ~/aidy/config/media/inbound ~/aidy/workspace/media/inbound`；`tail -n 14 ~/aidy/logs/inbound-prune.log` | 两处体积相对上周可解释；日志每天有 `deleted_files=`（可为 0）。未装 cron 见[第 10.4 节](#sec-10-4) |
-| 4 | secret 权限 | `stat -c '%a %n' ~/aidy/secrets/*.txt` | 文件为 `600`（或 `640` 且仅服务账号可读） |
-| 5 | MEMORY.md | `test -f ~/aidy/workspace/MEMORY.md && echo OK` | 打印 `OK` |
-| 6 | 模型仍解析 | `docker logs aidy-gateway 2>&1 \| grep 'agent model' \| tail -n 3` | 仍是预期的 `domestic/...` 或 `bailian/...`，`thinking=off` |
+| 3 | 工作区磁盘 | `du -sh ~/xa ~/xa/workspace ~/xa/config` | 相对上周增长可解释 |
+| 3b | inbound 原件 | `du -sh ~/xa/config/media/inbound ~/xa/workspace/media/inbound`；`tail -n 14 ~/xa/logs/inbound-prune.log` | 两处体积相对上周可解释；日志每天有 `deleted_files=`（可为 0）。未装 cron 见[第 10.4 节](#sec-10-4) |
+| 4 | secret 权限 | `stat -c '%a %n' ~/xa/secrets/*.txt` | 文件为 `600`（或 `640` 且仅服务账号可读） |
+| 5 | MEMORY.md | `test -f ~/xa/workspace/MEMORY.md && echo OK` | 打印 `OK` |
+| 6 | 模型仍解析 | `docker logs xa-gateway 2>&1 \| grep 'agent model' \| tail -n 3` | 仍是预期的 `domestic/...` 或 `bailian/...`，`thinking=off` |
 | 7 | 插件/通道 | [第 3.4 节](#sec-03-4) `plugins list` + `channels status --channel wecom` | enabled，无 `autostart suppressed` |
-| 8 | 无明文 Key 漂移 | `grep -R --exclude-dir=workspace -E 'sk-|dashscope|BotSecret|apiKey.: .[^$]' ~/aidy/config/openclaw.json ~/aidy/config/agents 2>/dev/null \| head` | 不应把真值搜出来；占位符 `${VAR}` 可以有 |
+| 8 | 无明文 Key 漂移 | `grep -R --exclude-dir=workspace -E 'sk-|dashscope|BotSecret|apiKey.: .[^$]' ~/xa/config/openclaw.json ~/xa/config/agents 2>/dev/null \| head` | 不应把真值搜出来；占位符 `${VAR}` 可以有 |
 
 有 Redis 时加（存活看 `ps` 的 healthy；下面是容量抽查，不是再 PING）：
 
 ```bash
-docker compose -f ~/aidy-redis/docker-compose.yml ps aidy-redis
-docker compose -f ~/aidy-redis/docker-compose.yml exec -T aidy-redis \
+docker compose -f ~/xa-redis/docker-compose.yml ps xa-redis
+docker compose -f ~/xa-redis/docker-compose.yml exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" INFO memory'
-docker compose -f ~/aidy-redis/docker-compose.yml exec -T aidy-redis \
+docker compose -f ~/xa-redis/docker-compose.yml exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" INFO persistence'
-docker compose -f ~/aidy-redis/docker-compose.yml exec -T aidy-redis \
+docker compose -f ~/xa-redis/docker-compose.yml exec -T xa-redis \
   sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" DBSIZE'
 ```
 
@@ -653,12 +653,12 @@ docker compose -f ~/aidy-redis/docker-compose.yml exec -T aidy-redis \
 
 | 必须备份 | 可以不备份（能重建） |
 | --- | --- |
-| `~/aidy/config/`（尤其 `openclaw.json`） | `openclaw/openclaw` 镜像（可再 `pull`） |
-| `~/aidy/workspace/` | 正在跑的容器 |
-| `~/aidy/secrets/` | 能从 npm / 本仓库重装的插件源码 |
-| `~/aidy/docker-compose.yml`、`entrypoint.sh` | — |
-| `~/aidy/extensions/*/bridge-config.json` 等本地改过的配置 | 未改过的插件源码（`node_modules` 可按 OA Redis 手册 4.2 用官方镜像重装） |
-| `~/aidy-redis/redis-data/` 与 `~/aidy-redis/secrets/`（仅 Redis 环境） | — |
+| `~/xa/config/`（尤其 `openclaw.json`） | `openclaw/openclaw` 镜像（可再 `pull`） |
+| `~/xa/workspace/` | 正在跑的容器 |
+| `~/xa/secrets/` | 能从 npm / 本仓库重装的插件源码 |
+| `~/xa/docker-compose.yml`、`entrypoint.sh` | — |
+| `~/xa/extensions/*/bridge-config.json` 等本地改过的配置 | 未改过的插件源码（`node_modules` 可按 OA Redis 手册 4.2 用官方镜像重装） |
+| `~/xa-redis/redis-data/` 与 `~/xa-redis/secrets/`（仅 Redis 环境） | — |
 
 **不要**把含 `secrets/` 的备份传到公共网盘、不要提交 git。备份文件权限应是 `600`，只放在本机或企业加密盘。
 
@@ -669,104 +669,104 @@ docker compose -f ~/aidy-redis/docker-compose.yml exec -T aidy-redis \
 在 Ubuntu：
 
 ```bash
-BACKUP_DIR="${HOME}/aidy-backups"
+BACKUP_DIR="${HOME}/xa-backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "${BACKUP_DIR}"
 
 # 停服务再备 Redis 数据更稳；只备 config/workspace/secrets 时可以不停
-cd ~/aidy
+cd ~/xa
 docker compose stop
 
-tar --exclude='aidy/extensions/*/node_modules' \
-    --exclude='aidy/extensions/*/npm' \
-    -czf "${BACKUP_DIR}/aidy-${STAMP}.tar.gz" \
+tar --exclude='xa/extensions/*/node_modules' \
+    --exclude='xa/extensions/*/npm' \
+    -czf "${BACKUP_DIR}/xa-${STAMP}.tar.gz" \
     -C "${HOME}" \
-    aidy/docker-compose.yml \
-    aidy/entrypoint.sh \
-    aidy/config \
-    aidy/workspace \
-    aidy/secrets \
-    aidy/extensions \
-    $(test -d "${HOME}/aidy-redis/redis-data" && echo aidy-redis/redis-data) \
-    $(test -d "${HOME}/aidy-redis/secrets" && echo aidy-redis/secrets) \
-    $(test -f "${HOME}/aidy-redis/docker-compose.yml" && echo aidy-redis/docker-compose.yml) \
-    $(test -f "${HOME}/aidy-redis/redis-entrypoint.sh" && echo aidy-redis/redis-entrypoint.sh)
+    xa/docker-compose.yml \
+    xa/entrypoint.sh \
+    xa/config \
+    xa/workspace \
+    xa/secrets \
+    xa/extensions \
+    $(test -d "${HOME}/xa-redis/redis-data" && echo xa-redis/redis-data) \
+    $(test -d "${HOME}/xa-redis/secrets" && echo xa-redis/secrets) \
+    $(test -f "${HOME}/xa-redis/docker-compose.yml" && echo xa-redis/docker-compose.yml) \
+    $(test -f "${HOME}/xa-redis/redis-entrypoint.sh" && echo xa-redis/redis-entrypoint.sh)
 
-chmod 600 "${BACKUP_DIR}/aidy-${STAMP}.tar.gz"
+chmod 600 "${BACKUP_DIR}/xa-${STAMP}.tar.gz"
 docker compose start
 curl -sS http://127.0.0.1:18789/healthz; echo
 
-ls -lh "${BACKUP_DIR}/aidy-${STAMP}.tar.gz"
-tar -tzf "${BACKUP_DIR}/aidy-${STAMP}.tar.gz" | head
+ls -lh "${BACKUP_DIR}/xa-${STAMP}.tar.gz"
+tar -tzf "${BACKUP_DIR}/xa-${STAMP}.tar.gz" | head
 ```
 
-没有 Redis 时，`test -d "${HOME}/aidy-redis/redis-data"` 那一项会自动空掉，不必改命令。
+没有 Redis 时，`test -d "${HOME}/xa-redis/redis-data"` 那一项会自动空掉，不必改命令。
 
 只备份配置和密钥、不停机（插件源码可从本仓库重拷）：
 
 ```bash
 STAMP="$(date +%Y%m%d-%H%M%S)"
-mkdir -p "${HOME}/aidy-backups"
-tar -czf "${HOME}/aidy-backups/aidy-config-${STAMP}.tar.gz" \
-  -C "${HOME}" aidy/docker-compose.yml aidy/entrypoint.sh aidy/config aidy/workspace aidy/secrets
-chmod 600 "${HOME}/aidy-backups/aidy-config-${STAMP}.tar.gz"
+mkdir -p "${HOME}/xa-backups"
+tar -czf "${HOME}/xa-backups/xa-config-${STAMP}.tar.gz" \
+  -C "${HOME}" xa/docker-compose.yml xa/entrypoint.sh xa/config xa/workspace xa/secrets
+chmod 600 "${HOME}/xa-backups/xa-config-${STAMP}.tar.gz"
 ```
 
-Windows 侧若要把备份拷到 `F:\backup`，用 WSL 路径，不要在资源管理器里对着正在跑的 `~/aidy` 直接打包：
+Windows 侧若要把备份拷到 `F:\backup`，用 WSL 路径，不要在资源管理器里对着正在跑的 `~/xa` 直接打包：
 
 ```bash
-mkdir -p /mnt/f/backup/aidy
-cp -a "${HOME}/aidy-backups/aidy-${STAMP}.tar.gz" /mnt/f/backup/aidy/
+mkdir -p /mnt/f/backup/xa
+cp -a "${HOME}/xa-backups/xa-${STAMP}.tar.gz" /mnt/f/backup/xa/
 ```
 
 <a id="sec-06-3" name="sec-06-3"></a>
 
 ### 6.3 恢复
 
-**先停旧容器，再覆盖数据，最后 up。** 恢复会覆盖当前 `~/aidy`，先确认你要回到的是哪一份 tar。
+**先停旧容器，再覆盖数据，最后 up。** 恢复会覆盖当前 `~/xa`，先确认你要回到的是哪一份 tar。
 
 ```bash
-BACKUP_TAR="${HOME}/aidy-backups/aidy-20260831-090000.tar.gz"   # 换成实际文件名
+BACKUP_TAR="${HOME}/xa-backups/xa-20260831-090000.tar.gz"   # 换成实际文件名
 test -f "${BACKUP_TAR}" || { echo "备份文件不存在"; exit 1; }
 
-cd ~/aidy
+cd ~/xa
 docker compose down
 
 # 可选：把当前坏掉的目录挪走，而不是直接覆盖
-mv "${HOME}/aidy" "${HOME}/aidy.broken.$(date +%Y%m%d-%H%M%S)"
-mkdir -p "${HOME}/aidy"
+mv "${HOME}/xa" "${HOME}/xa.broken.$(date +%Y%m%d-%H%M%S)"
+mkdir -p "${HOME}/xa"
 
 tar -xzf "${BACKUP_TAR}" -C "${HOME}"
-sudo chown -R 1000:1000 "${HOME}/aidy"
-chmod 600 "${HOME}/aidy/secrets/"*.txt
-chmod 755 "${HOME}/aidy/entrypoint.sh"
+sudo chown -R 1000:1000 "${HOME}/xa"
+chmod 600 "${HOME}/xa/secrets/"*.txt
+chmod 755 "${HOME}/xa/entrypoint.sh"
 
 # 备份排除了 node_modules；按 OA Redis 接入手册 4.2 用官方镜像重装后再 up。
-# 镜像名以 docker compose ps 的 IMAGE 列、以及 ~/aidy/docker-compose.yml 的 image: 为准。
+# 镜像名以 docker compose ps 的 IMAGE 列、以及 ~/xa/docker-compose.yml 的 image: 为准。
 # 本机没有 openclaw/openclaw、只有 ghcr.io/openclaw/openclaw:latest 时：
 # 用 OA Redis 接入手册 4.2 的「GHCR 名」整段，不要 docker pull openclaw/openclaw:latest。
 docker run --rm --user 1000:1000 \
   -e HOME=/tmp \
   -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "${HOME}/aidy/extensions/oa-workflow-bridge-redis:/app" \
+  -v "${HOME}/xa/extensions/oa-workflow-bridge-redis:/app" \
   -w /app \
   openclaw/openclaw:latest \
   npm install --omit=dev
 
-cd ~/aidy
+cd ~/xa
 docker compose up -d
 sleep 5
 docker compose ps
 curl -sS http://127.0.0.1:18789/healthz; echo
-docker logs --tail 80 --timestamps aidy-gateway
+docker logs --tail 80 --timestamps xa-gateway
 ```
 
 恢复后必做：
 
 ```bash
-docker exec -it aidy-gateway node dist/index.js config validate
-docker exec -it aidy-gateway node dist/index.js channels status --channel wecom
-docker exec -it aidy-gateway node dist/index.js models status
+docker exec -it xa-gateway node dist/index.js config validate
+docker exec -it xa-gateway node dist/index.js channels status --channel wecom
+docker exec -it xa-gateway node dist/index.js models status
 ```
 
 再用测试机器人发一条「你是谁」。不要在没验证前把生产 Bot 指回来。
@@ -779,7 +779,7 @@ docker exec -it aidy-gateway node dist/index.js models status
 
 ## 7. 密钥轮换
 
-原则与安装手册 6.4.5 相同：**只改 `~/aidy/secrets/*.txt`，再 `compose down/up`，不要用 CLI 写真文。**
+原则与安装手册 6.4.5 相同：**只改 `~/xa/secrets/*.txt`，再 `compose down/up`，不要用 CLI 写真文。**
 
 <a id="sec-07-1" name="sec-07-1"></a>
 
@@ -788,10 +788,10 @@ docker exec -it aidy-gateway node dist/index.js models status
 | 文件 | 环境变量 | 新值怎么来 | 轮完还要做什么 |
 | --- | --- | --- | --- |
 | `gateway_token.txt` | `OPENCLAW_GATEWAY_TOKEN` | 见下方 openssl | 用新 token 打开 Dashboard |
-| `wecom_bot_id.txt` / `wecom_bot_secret.txt` | `AIDY_IT_WECOM_*` | 企微管理后台重置 | 测收发；旧 Secret 会失效 |
-| `model_api_key.txt` | `AIDY_DOMESTIC_API_KEY` | 百炼控制台禁用旧 Key、建新 Key | 发一条对话；看是否 401 |
-| `model_base_url.txt` 等 | `AIDY_DOMESTIC_*` | 按百炼指南改 | `docker logs` 里 `agent model` 仍正确 |
-| `oa_redis_password.txt` | `OA_REDIS_URL` 里的密码 | 与 Redis 侧**内容**对齐，**路径独立** | 先改 `~/aidy-redis/secrets/redis_password.txt` 并重建 Redis，再改本文件并重建 Gateway |
+| `wecom_bot_id.txt` / `wecom_bot_secret.txt` | `XA_IT_WECOM_*` | 企微管理后台重置 | 测收发；旧 Secret 会失效 |
+| `model_api_key.txt` | `XA_DOMESTIC_API_KEY` | 百炼控制台禁用旧 Key、建新 Key | 发一条对话；看是否 401 |
+| `model_base_url.txt` 等 | `XA_DOMESTIC_*` | 按百炼指南改 | `docker logs` 里 `agent model` 仍正确 |
+| `oa_redis_password.txt` | `OA_REDIS_URL` 里的密码 | 与 Redis 侧**内容**对齐，**路径独立** | 先改 `~/xa-redis/secrets/redis_password.txt` 并重建 Redis，再改本文件并重建 Gateway |
 | `oa_api_user_id.txt` | `OA_API_USER_ID` | OA 管理端人员资源 ID | **只读预检** Header `userid`；**不是**建单 Header。建单用 Redis `idmap` 的申请人。由 `oa-workflow-bridge-redis` 读取 |
 | `oa_app_secret.txt` | `OA_APP_SECRET` | OA 控制台轮换 AppSecret | 旧值作废后再测预检 |
 | `wecom_identity_corpid.txt` / `wecom_identity_secret.txt` | `WECOM_IDENTITY_*` | 企微自建应用重置 | 与 BotSecret 分开；测 `prepare` 能写/读 `idmap` |
@@ -799,19 +799,19 @@ docker exec -it aidy-gateway node dist/index.js models status
 生成新 Gateway Token：
 
 ```bash
-cp -a ~/aidy/secrets/gateway_token.txt ~/aidy/secrets/gateway_token.txt.bak
-openssl rand -base64 32 | tr -d '\n' > ~/aidy/secrets/gateway_token.txt
-chmod 600 ~/aidy/secrets/gateway_token.txt
-sudo chown 1000:1000 ~/aidy/secrets/gateway_token.txt
+cp -a ~/xa/secrets/gateway_token.txt ~/xa/secrets/gateway_token.txt.bak
+openssl rand -base64 32 | tr -d '\n' > ~/xa/secrets/gateway_token.txt
+chmod 600 ~/xa/secrets/gateway_token.txt
+sudo chown 1000:1000 ~/xa/secrets/gateway_token.txt
 ```
 
 轮换模型 Key：
 
 ```bash
-cp -a ~/aidy/secrets/model_api_key.txt ~/aidy/secrets/model_api_key.txt.bak
-printf '%s' '新的APIKey' > ~/aidy/secrets/model_api_key.txt
-chmod 600 ~/aidy/secrets/model_api_key.txt
-sudo chown 1000:1000 ~/aidy/secrets/model_api_key.txt
+cp -a ~/xa/secrets/model_api_key.txt ~/xa/secrets/model_api_key.txt.bak
+printf '%s' '新的APIKey' > ~/xa/secrets/model_api_key.txt
+chmod 600 ~/xa/secrets/model_api_key.txt
+sudo chown 1000:1000 ~/xa/secrets/model_api_key.txt
 ```
 
 每一行一个文件，**不要**末尾多空行（`printf '%s'` 不要用 `echo`）。
@@ -821,42 +821,42 @@ sudo chown 1000:1000 ~/aidy/secrets/model_api_key.txt
 ### 7.2 生效
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose down
 docker compose up -d
 sleep 5
 curl -sS http://127.0.0.1:18789/healthz; echo
-docker exec aidy-gateway sh -c '
-  for v in OPENCLAW_GATEWAY_TOKEN AIDY_IT_WECOM_BOT_ID AIDY_IT_WECOM_BOT_SECRET \
-           AIDY_DOMESTIC_API_KEY AIDY_DOMESTIC_BASE_URL AIDY_DOMESTIC_MODEL_ID \
-           AIDY_DOMESTIC_MODEL_REF AIDY_DOMESTIC_API; do
+docker exec xa-gateway sh -c '
+  for v in OPENCLAW_GATEWAY_TOKEN XA_IT_WECOM_BOT_ID XA_IT_WECOM_BOT_SECRET \
+           XA_DOMESTIC_API_KEY XA_DOMESTIC_BASE_URL XA_DOMESTIC_MODEL_ID \
+           XA_DOMESTIC_MODEL_REF XA_DOMESTIC_API; do
     eval "test -n \"\$$v\"" || { echo "MISSING:$v"; exit 1; }
   done
   echo SECRET_INJECT_OK
 '
 ```
 
-`SECRET_INJECT_OK` 只说明变量非空，不打印真值。阶段 A 没有模型 secret 时，把循环里的 `AIDY_DOMESTIC_*` 删掉。
+`SECRET_INJECT_OK` 只说明变量非空，不打印真值。阶段 A 没有模型 secret 时，把循环里的 `XA_DOMESTIC_*` 删掉。
 
 验证 Dashboard：
 
 ```bash
 echo "用这个 token 打开 http://localhost:18789/ :"
-cat ~/aidy/secrets/gateway_token.txt; echo
+cat ~/xa/secrets/gateway_token.txt; echo
 ```
 
 旧 token 应立刻失效。验证通过后再删除 `.bak`：
 
 ```bash
-rm -f ~/aidy/secrets/*.txt.bak
+rm -f ~/xa/secrets/*.txt.bak
 ```
 
 轮换失败要回退时：
 
 ```bash
-mv ~/aidy/secrets/gateway_token.txt.bak ~/aidy/secrets/gateway_token.txt
+mv ~/xa/secrets/gateway_token.txt.bak ~/xa/secrets/gateway_token.txt
 # 其他文件同理
-cd ~/aidy && docker compose down && docker compose up -d
+cd ~/xa && docker compose down && docker compose up -d
 ```
 
 [← 6. 备份与恢复](#sec-06) · [↑ 目录](#toc) · [下一节 → 8. 镜像与插件](#sec-08)
@@ -872,10 +872,10 @@ cd ~/aidy && docker compose down && docker compose up -d
 ### 8.1 先看清当前版本
 
 ```bash
-docker inspect -f '{{.Config.Image}} {{.Image}}' aidy-gateway
-docker image inspect --format '{{index .RepoDigests 0}} {{.Id}} {{.Created}}' "$(docker inspect -f '{{.Config.Image}}' aidy-gateway)"
-docker exec -it aidy-gateway node dist/index.js --version
-docker exec -it aidy-gateway node dist/index.js plugins list
+docker inspect -f '{{.Config.Image}} {{.Image}}' xa-gateway
+docker image inspect --format '{{index .RepoDigests 0}} {{.Id}} {{.Created}}' "$(docker inspect -f '{{.Config.Image}}' xa-gateway)"
+docker exec -it xa-gateway node dist/index.js --version
+docker exec -it xa-gateway node dist/index.js plugins list
 ```
 
 `image inspect` 的参数必须是本机真实名字（`inspect` 第一段输出）。本机只有 `ghcr.io/openclaw/openclaw:latest` 时，不要写 `openclaw/openclaw:latest`。
@@ -897,14 +897,14 @@ docker exec -it aidy-gateway node dist/index.js plugins list
 生产建议把 `docker-compose.yml` 里的 `image: openclaw/openclaw:latest` 改成具体版本或 digest，避免同 tag 内容被换掉。仍用 `latest` 时，按下面做，并记下升级前 digest。
 
 ```bash
-cd ~/aidy
+cd ~/xa
 
 # 1. 备份
 # （执行第 6.2 节）
 
 # 2. 记下旧镜像
-docker inspect -f '{{.Image}}' aidy-gateway > /tmp/aidy-gateway-image-before.txt
-cat /tmp/aidy-gateway-image-before.txt
+docker inspect -f '{{.Image}}' xa-gateway > /tmp/xa-gateway-image-before.txt
+cat /tmp/xa-gateway-image-before.txt
 
 # 3. 拉新镜像（compose 的 image: 须与正在用的仓库名一致；混用 Docker Hub 名和 ghcr 名会拉错源）
 docker compose pull
@@ -917,16 +917,16 @@ sleep 8
 
 # 5. 验证
 curl -sS http://127.0.0.1:18789/healthz; echo
-docker exec -it aidy-gateway node dist/index.js --version
-docker exec -it aidy-gateway node dist/index.js config validate
-docker exec -it aidy-gateway node dist/index.js doctor
-docker logs --tail 80 --timestamps aidy-gateway
+docker exec -it xa-gateway node dist/index.js --version
+docker exec -it xa-gateway node dist/index.js config validate
+docker exec -it xa-gateway node dist/index.js doctor
+docker logs --tail 80 --timestamps xa-gateway
 ```
 
 升级后 schema 报警时，**先备份 json**，再考虑：
 
 ```bash
-docker exec -it aidy-gateway node dist/index.js doctor --fix
+docker exec -it xa-gateway node dist/index.js doctor --fix
 ```
 
 `--fix` 可能改 `agents.entries` 结构。改完必须再 `config validate`，并用测试消息回归。不要在生产 Bot 上第一次试 `--fix`。
@@ -938,11 +938,11 @@ docker exec -it aidy-gateway node dist/index.js doctor --fix
 若升级前记下了镜像 ID：
 
 ```bash
-OLD_IMAGE="$(cat /tmp/aidy-gateway-image-before.txt)"
+OLD_IMAGE="$(cat /tmp/xa-gateway-image-before.txt)"
 echo "回滚到 ${OLD_IMAGE}"
 # tag 目标必须与 yml 的 image: 一致。本机 compose 若写 ghcr.io/openclaw/openclaw:latest，把下一行换成该名。
 docker tag "${OLD_IMAGE}" openclaw/openclaw:latest
-cd ~/aidy
+cd ~/xa
 docker compose down
 docker compose up -d
 curl -sS http://127.0.0.1:18789/healthz; echo
@@ -963,33 +963,33 @@ curl -sS http://127.0.0.1:18789/healthz; echo
 要 ≥ 2026.7.2（才能开「思考中」）：按该手册 16.3 用 `npm:@wecom/wecom-openclaw-plugin@<版本> --force --accept-capabilities`，再：
 
 ```bash
-cd ~/aidy
-docker compose restart aidy-gateway
+cd ~/xa
+docker compose restart xa-gateway
 sleep 5
 curl -sS http://127.0.0.1:18789/healthz; echo
-docker exec -it aidy-gateway node dist/index.js plugins list
-docker exec -it aidy-gateway node dist/index.js channels status --channel wecom
+docker exec -it xa-gateway node dist/index.js plugins list
+docker exec -it xa-gateway node dist/index.js channels status --channel wecom
 ```
 
-`plugins list` 的 `version` 必须已是目标号。升完先保持 `sendThinkingMessage: false` 测收发，通过后再按企微指南 **7.4** 打开占位。打开后思考中不消失：立刻改回 `false` 并 `docker compose restart aidy-gateway`。不要 `doctor --fix`。不要把 `wecom-openclaw-plugin` 写入 `alsoAllow`。
+`plugins list` 的 `version` 必须已是目标号。升完先保持 `sendThinkingMessage: false` 测收发，通过后再按企微指南 **7.4** 打开占位。打开后思考中不消失：立刻改回 `false` 并 `docker compose restart xa-gateway`。不要 `doctor --fix`。不要把 `wecom-openclaw-plugin` 写入 `alsoAllow`。
 
 <a id="sec-08-5" name="sec-08-5"></a>
 
 ### 8.5 升级后回归（最短路径）
 
 ```bash
-cd ~/aidy
+cd ~/xa
 curl -sS http://127.0.0.1:18789/healthz; echo
-docker exec -it aidy-gateway node dist/index.js config validate
-docker exec -it aidy-gateway node dist/index.js agents list --bindings
-docker exec -it aidy-gateway node dist/index.js channels status --channel wecom
-docker logs aidy-gateway 2>&1 | grep -E 'agent model' | tail -n 5
+docker exec -it xa-gateway node dist/index.js config validate
+docker exec -it xa-gateway node dist/index.js agents list --bindings
+docker exec -it xa-gateway node dist/index.js channels status --channel wecom
+docker logs xa-gateway 2>&1 | grep -E 'agent model' | tail -n 5
 ```
 
 然后用**测试机器人**发「你是谁」，同时：
 
 ```bash
-docker logs -f --timestamps aidy-gateway
+docker logs -f --timestamps xa-gateway
 ```
 
 期望：`model-fetch` 的 200 到 `kind=final` 约 2～5 秒（已按百炼指南关掉隐藏思考），然后 `Reply message sent` + `Reply ack received`。详细延迟见 `DashScope 兼容 Provider 配置手册.md` §5.4 / §6.7。
@@ -1004,31 +1004,31 @@ docker logs -f --timestamps aidy-gateway
 
 | 变更 | 是否要重建容器 | 命令 |
 | --- | --- | --- |
-| `openclaw.json` 多数业务字段（tools、allowFrom、bindings） | 通常热重载；不生效再重启 | `docker compose restart aidy-gateway` |
-| `plugins.load.paths`、gateway `port`/`bind` | 要 | `cd ~/aidy && docker compose down && docker compose up -d` |
+| `openclaw.json` 多数业务字段（tools、allowFrom、bindings） | 通常热重载；不生效再重启 | `docker compose restart xa-gateway` |
+| `plugins.load.paths`、gateway `port`/`bind` | 要 | `cd ~/xa && docker compose down && docker compose up -d` |
 | secret 文件内容 | 要 down/up | 同上 |
 | compose / entrypoint | 要 down/up | 同上 |
 | workspace 规则文件（`AGENTS.md` 等） | 一般不用重启 | 下一轮对话生效；异常再 restart |
-| 扩展目录里新拷插件 | 要 down/up | 先 `sudo chown -R 1000:1000 ~/aidy/extensions`；OA Redis 插件还须按接入手册 **4.2** 用官方镜像装依赖，再 `down && up` |
+| 扩展目录里新拷插件 | 要 down/up | 先 `sudo chown -R 1000:1000 ~/xa/extensions`；OA Redis 插件还须按接入手册 **4.2** 用官方镜像装依赖，再 `down && up` |
 
 改完 json 先校验再重启：
 
 ```bash
 docker exec -it \
-  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/aidy/secrets/gateway_token.txt)" \
-  aidy-gateway node dist/index.js config validate
-cd ~/aidy && docker compose restart aidy-gateway
+  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/xa/secrets/gateway_token.txt)" \
+  xa-gateway node dist/index.js config validate
+cd ~/xa && docker compose restart xa-gateway
 ```
 
-**禁止：** 在该容器里跑 `onboard` / `setup`；用 `config set` 把 `${AIDY_DOMESTIC_BASE_URL}` 等占位符覆盖成明文。见安装手册 8.3、8.4。
+**禁止：** 在该容器里跑 `onboard` / `setup`；用 `config set` 把 `${XA_DOMESTIC_BASE_URL}` 等占位符覆盖成明文。见安装手册 8.3、8.4。
 
-若 Control UI 曾写出 `~/aidy/config/agents/itservicedeskagent/agent/models.json`（可能含明文 Key）：
+若 Control UI 曾写出 `~/xa/config/agents/itservicedeskagent/agent/models.json`（可能含明文 Key）：
 
 ```bash
-ls -l ~/aidy/config/agents/itservicedeskagent/agent/models.json
+ls -l ~/xa/config/agents/itservicedeskagent/agent/models.json
 # 确认后删除，只保留 openclaw.json + secrets
-rm -f ~/aidy/config/agents/itservicedeskagent/agent/models.json
-cd ~/aidy && docker compose restart aidy-gateway
+rm -f ~/xa/config/agents/itservicedeskagent/agent/models.json
+cd ~/xa && docker compose restart xa-gateway
 ```
 
 [← 8. 镜像与插件](#sec-08) · [↑ 目录](#toc) · [下一节 → 10. 资源、磁盘、WSL 虚拟盘](#sec-10)
@@ -1051,15 +1051,15 @@ cd ~/aidy && docker compose restart aidy-gateway
 
 ```bash
 docker stats --no-stream
-docker stats --no-stream aidy-gateway
-docker stats --no-stream aidy-gateway aidy-redis
+docker stats --no-stream xa-gateway
+docker stats --no-stream xa-gateway xa-redis
 
 # 宿主机（WSL）内存与磁盘
 free -h
 df -h
-df -h ~/aidy
-du -sh ~/aidy ~/aidy/config ~/aidy/workspace ~/aidy/extensions ~/aidy/secrets
-du -sh ~/aidy/workspace/* 2>/dev/null | sort -h | tail -n 20
+df -h ~/xa
+du -sh ~/xa ~/xa/config ~/xa/workspace ~/xa/extensions ~/xa/secrets
+du -sh ~/xa/workspace/* 2>/dev/null | sort -h | tail -n 20
 ```
 
 当前 compose **没有** `mem_limit` / `cpus`。WSL 默认可能吃掉大量 Windows 内存。建议在 Windows 用户目录创建 `.wslconfig`（不是 Ubuntu 里的 `/etc/wsl.conf`）。
@@ -1087,13 +1087,13 @@ wsl --shutdown
 ```
 
 ```bash
-cd ~/aidy && docker compose up -d
+cd ~/xa && docker compose up -d
 ```
 
 容器限额见[第 13.3 节](#sec-13-3)。加限额后若 Gateway 被 OOM 杀掉：
 
 ```bash
-docker inspect -f '{{.State.OOMKilled}} {{.State.ExitCode}}' aidy-gateway
+docker inspect -f '{{.State.OOMKilled}} {{.State.ExitCode}}' xa-gateway
 dmesg -T 2>/dev/null | grep -i -E 'oom|killed process' | tail
 ```
 
@@ -1116,7 +1116,7 @@ docker volume ls
 docker image prune -f
 ```
 
-删已停止容器、悬空镜像、无用网络（**不会**删 `~/aidy` 绑定挂载里的文件）：
+删已停止容器、悬空镜像、无用网络（**不会**删 `~/xa` 绑定挂载里的文件）：
 
 ```bash
 docker system prune -f
@@ -1148,14 +1148,14 @@ wsl --manage Ubuntu-24.04 --set-sparse true
 Optimize-VHD -Path "E:\WSL\Ubuntu-24.04\ext4.vhdx" -Mode Full
 ```
 
-`Optimize-VHD` 需要 Hyper-V 模块。没有该命令时，用磁盘管理工具压缩，或把路径换成 `wsl -l -v` 对应发行版实际 vhdx。压缩不是备份，做之前仍建议[第 6.2 节](#sec-06-2)先打包 `~/aidy`。
+`Optimize-VHD` 需要 Hyper-V 模块。没有该命令时，用磁盘管理工具压缩，或把路径换成 `wsl -l -v` 对应发行版实际 vhdx。压缩不是备份，做之前仍建议[第 6.2 节](#sec-06-2)先打包 `~/xa`。
 
 工作区若在 `/mnt/c` 会又慢又容易权限错。确认不在 Windows 盘上：
 
 ```bash
-df -h ~/aidy
-readlink -f ~/aidy
-# 期望类似 /home/YOUR_LINUX_USER/aidy ，不要是 /mnt/c/... 或 /mnt/e/...
+df -h ~/xa
+readlink -f ~/xa
+# 期望类似 /home/YOUR_LINUX_USER/xa ，不要是 /mnt/c/... 或 /mnt/e/...
 ```
 
 <a id="sec-10-4" name="sec-10-4"></a>
@@ -1166,24 +1166,24 @@ readlink -f ~/aidy
 
 | 宿主机 | 容器内 | 作用 |
 | --- | --- | --- |
-| `~/aidy/config/media/inbound` | `/home/node/.openclaw/media/inbound` | 桥接允许根之一（`stateDir/media/inbound`） |
-| `~/aidy/workspace/media/inbound` | `/home/node/.openclaw/workspace/media/inbound` | 通道落盘；桥接同样允许拷进 staging。模型禁止 `read` |
+| `~/xa/config/media/inbound` | `/home/node/.openclaw/media/inbound` | 桥接允许根之一（`stateDir/media/inbound`） |
+| `~/xa/workspace/media/inbound` | `/home/node/.openclaw/workspace/media/inbound` | 通道落盘；桥接同样允许拷进 staging。模型禁止 `read` |
 
 待确认窗口默认 24 小时；同一会话改稿（`cancel` 再 `prepare`）还可能回读未满 24 小时的原件。因此只删 **满 1440 分钟** 的文件。用 `-mmin +1440`，不要用 `-mtime +1`（GNU find 常变成满两天才匹配）。
 
 先确认是两份还是符号链接：
 
 ```bash
-ls -ld ~/aidy/config/media/inbound ~/aidy/workspace/media/inbound
-readlink -f ~/aidy/config/media/inbound
-readlink -f ~/aidy/workspace/media/inbound
-du -sh ~/aidy/config/media/inbound ~/aidy/workspace/media/inbound
+ls -ld ~/xa/config/media/inbound ~/xa/workspace/media/inbound
+readlink -f ~/xa/config/media/inbound
+readlink -f ~/xa/workspace/media/inbound
+du -sh ~/xa/config/media/inbound ~/xa/workspace/media/inbound
 ```
 
 `readlink -f` 不同就要两处都清。先干跑（只列出、不删除）：
 
 ```bash
-find ~/aidy/config/media/inbound ~/aidy/workspace/media/inbound \
+find ~/xa/config/media/inbound ~/xa/workspace/media/inbound \
   -type f -mmin +1440 -ls
 ```
 
@@ -1192,21 +1192,21 @@ find ~/aidy/config/media/inbound ~/aidy/workspace/media/inbound \
 装脚本（跑 Gateway 的同一 Linux 用户，不要 root）：
 
 ```bash
-mkdir -p ~/aidy/scripts ~/aidy/logs
+mkdir -p ~/xa/scripts ~/xa/logs
 ```
 
-`~/aidy/scripts/prune-inbound.sh`：
+`~/xa/scripts/prune-inbound.sh`：
 
 ```bash
 #!/bin/sh
 set -eu
 
-LOG="${HOME}/aidy/logs/inbound-prune.log"
-LOCK="${HOME}/aidy/logs/inbound-prune.lock"
+LOG="${HOME}/xa/logs/inbound-prune.log"
+LOCK="${HOME}/xa/logs/inbound-prune.lock"
 
 DIRS="
-${HOME}/aidy/config/media/inbound
-${HOME}/aidy/workspace/media/inbound
+${HOME}/xa/config/media/inbound
+${HOME}/xa/workspace/media/inbound
 "
 
 ts() { TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S'; }
@@ -1235,15 +1235,15 @@ echo "$(ts) done total_deleted=$total" >> "$LOG"
 用 nano 写入上面全文。已有脚本时不要整份跳过：打开后只把 `ts()` 换成上面这一行即可。
 
 ```bash
-nano ~/aidy/scripts/prune-inbound.sh
+nano ~/xa/scripts/prune-inbound.sh
 ```
 
 粘贴脚本（或只改 `ts()`）→ `Ctrl+O` → 回车 → `Ctrl+X`。然后：
 
 ```bash
-chmod 700 ~/aidy/scripts/prune-inbound.sh
-~/aidy/scripts/prune-inbound.sh
-tail -n 5 ~/aidy/logs/inbound-prune.log
+chmod 700 ~/xa/scripts/prune-inbound.sh
+~/xa/scripts/prune-inbound.sh
+tail -n 5 ~/xa/logs/inbound-prune.log
 ```
 
 这一步是**马上清一次**。要每天自动跑，必须再写入当前用户的 crontab（下面 [10.4.1](#sec-10-4-1)）。脚本在、crontab 没有，第二天不会自己删。
@@ -1259,15 +1259,15 @@ tail -n 5 ~/aidy/logs/inbound-prune.log
 ```bash
 whoami
 echo "$HOME"
-ls -l "$HOME/aidy/scripts/prune-inbound.sh"
-echo "15 3 * * * $HOME/aidy/scripts/prune-inbound.sh"
+ls -l "$HOME/xa/scripts/prune-inbound.sh"
+echo "15 3 * * * $HOME/xa/scripts/prune-inbound.sh"
 timedatectl | grep Time
 ```
 
 `ls` 必须能看到脚本。最后一条 `echo` 的输出整行复制，例如用户是 `lijinjin` 时是：
 
 ```text
-15 3 * * * /home/lijinjin/aidy/scripts/prune-inbound.sh
+15 3 * * * /home/lijinjin/xa/scripts/prune-inbound.sh
 ```
 
 `15 3 * * *` 表示每天 **03:15**（上面 `timedatectl` 的时区）。工位 WSL 与 SmartX 虚机是两台机器，crontab **不会**互相同步，要在跑 Gateway 的那台各写一次。
@@ -1306,18 +1306,18 @@ systemctl is-active cron
 crontab 只是预约，**不会立刻删文件**。现在再清一次仍用：
 
 ```bash
-"$HOME/aidy/scripts/prune-inbound.sh"
+"$HOME/xa/scripts/prune-inbound.sh"
 ```
 
 第二天看日志里是否有约 03:15 的 `done total_deleted=`（数字可为 0）：
 
 ```bash
-tail -n 20 ~/aidy/logs/inbound-prune.log
+tail -n 20 ~/xa/logs/inbound-prune.log
 ```
 
 工位 WSL：03:15 时电脑休眠或没开 Ubuntu，这次会错过，下次开机后要等再一个 03:15。SmartX 虚机保持开机则按点跑。
 
-不要：`rm -rf ~/aidy/workspace`；对工作区根目录 `find`；手删 `oa-workflow-bridge-redis/staging/`（未提交副本，插件 GC）；为腾盘删 ledger / `redis-data`。已进 OA 的附件在 Ecology，清 inbound 原件不影响已提交工单。
+不要：`rm -rf ~/xa/workspace`；对工作区根目录 `find`；手删 `oa-workflow-bridge-redis/staging/`（未提交副本，插件 GC）；为腾盘删 ledger / `redis-data`。已进 OA 的附件在 Ecology，清 inbound 原件不影响已提交工单。
 
 [← 9. 配置变更怎么落地](#sec-09) · [↑ 目录](#toc) · [下一节 → 11. 开机、睡眠、自愈](#sec-11)
 
@@ -1342,7 +1342,7 @@ tail -n 20 ~/aidy/logs/inbound-prune.log
 ```bash
 systemctl is-active docker
 sudo systemctl start docker
-cd ~/aidy && docker compose up -d
+cd ~/xa && docker compose up -d
 docker compose ps
 curl -sS http://127.0.0.1:18789/healthz; echo
 ```
@@ -1354,7 +1354,7 @@ curl -sS http://127.0.0.1:18789/healthz; echo
 WSL 不会在你没登录、没碰 WSL 时保证一直跑。需要开机就服务时，用**任务计划程序**在登录后跑：
 
 ```powershell
-wsl -d Ubuntu-24.04 -- bash -lc 'sudo systemctl start docker; cd "$HOME/aidy" && docker compose up -d'
+wsl -d Ubuntu-24.04 -- bash -lc 'sudo systemctl start docker; cd "$HOME/xa" && docker compose up -d'
 ```
 
 把上面这条做成「用户登录时」触发的计划任务。`docker` 组用户对 `systemctl start docker` 若要密码，改成已 enable 的 docker 在 systemd 下自动起，计划任务只执行 `docker compose up -d`。
@@ -1368,11 +1368,11 @@ Windows 睡眠常导致 WSL 网络或时钟异常，企微 WebSocket 看起来�
 ```bash
 timedatectl status
 date -u
-cd ~/aidy
-docker compose restart aidy-gateway
+cd ~/xa
+docker compose restart xa-gateway
 sleep 5
 curl -sS http://127.0.0.1:18789/healthz; echo
-docker logs --since 2m aidy-gateway 2>&1 | grep -Ei 'wecom|Authentication|listening'
+docker logs --since 2m xa-gateway 2>&1 | grep -Ei 'wecom|Authentication|listening'
 ```
 
 仍无 inbound：`docker compose down && docker compose up -d`。长期挂生产时，这台 PC **不要睡**，或迁到不休眠的 Linux 服务器（选型指南 5.5）。
@@ -1395,20 +1395,20 @@ Gateway 已经是 `Up` 时，**不要**再 `compose restart`，也不要用 `cha
 
 ```bash
 docker exec -it \
-  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/aidy/secrets/gateway_token.txt)" \
-  aidy-gateway node dist/index.js gateway call channels.start \
+  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/xa/secrets/gateway_token.txt)" \
+  xa-gateway node dist/index.js gateway call channels.start \
   --params '{"channel":"wecom"}'
 ```
 
-默认账号可省略 `accountId`；需要指定时用 `'{"channel":"wecom","accountId":"default"}'`。`docker exec` 不跑 entrypoint，必须 `-e` 注入 token（需要 `operator.admin`）。其它 `AIDY_*` 缺失警告可忽略，以主进程日志为准。
+默认账号可省略 `accountId`；需要指定时用 `'{"channel":"wecom","accountId":"default"}'`。`docker exec` 不跑 entrypoint，必须 `-e` 注入 token（需要 `operator.admin`）。其它 `XA_*` 缺失警告可忽略，以主进程日志为准。
 
 核对：
 
 ```bash
 docker exec -it \
-  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/aidy/secrets/gateway_token.txt)" \
-  aidy-gateway node dist/index.js channels status --channel wecom --probe
-docker logs --since 2m aidy-gateway 2>&1 | grep -Ei 'wecom|Authentication'
+  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/xa/secrets/gateway_token.txt)" \
+  xa-gateway node dist/index.js channels status --channel wecom --probe
+docker logs --since 2m xa-gateway 2>&1 | grep -Ei 'wecom|Authentication'
 ```
 
 期望：`enabled, configured, running, works`，以及 `Authentication successful`。`started: true` 只表示运行时 `running`，不等于企微已连上。
@@ -1418,10 +1418,10 @@ docker logs --since 2m aidy-gateway 2>&1 | grep -Ei 'wecom|Authentication'
 只在修好配置、容器仍 `Restarting` 时才：
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose down
 docker compose up -d
-docker compose logs -f aidy-gateway
+docker compose logs -f xa-gateway
 ```
 
 [← 10. 资源、磁盘、WSL 虚拟盘](#sec-10) · [↑ 目录](#toc) · [下一节 → 12. 三层排障与应急](#sec-12)
@@ -1471,20 +1471,20 @@ Windows 开了 VPN **不等于** WSL 里的 dockerd 走 VPN。拉镜像失败用
 | 现象 | 命令 | 处理 |
 | --- | --- | --- |
 | `Cannot connect to the Docker daemon` | `systemctl is-active docker` | `sudo systemctl start docker`；组权限：`groups` 含 `docker`，否则 `wsl --shutdown` 后重进 |
-| 容器 `Restarting` (78) | `docker logs --tail 120 aidy-gateway` | 按日志修 json（删 `meta`、去 wecom、补 `name`、OA 路径改成 `oa-workflow-bridge-redis`），再 `down && up` |
+| 容器 `Restarting` (78) | `docker logs --tail 120 xa-gateway` | 按日志修 json（删 `meta`、去 wecom、补 `name`、OA 路径改成 `oa-workflow-bridge-redis`），再 `down && up` |
 | `docker exec` 进不去 | `docker compose ps` | 先让容器 `Up`，不要在 Restarting 时 exec |
-| 权限 denied 挂载目录 | `ls -ln ~/aidy` | `sudo chown -R 1000:1000 ~/aidy` |
-| 读 `/run/secrets` Permission denied | `stat ~/aidy/secrets/*` | 适当放宽文件「其他用户可读」，或核对 `user: "1000:1000"` |
+| 权限 denied 挂载目录 | `ls -ln ~/xa` | `sudo chown -R 1000:1000 ~/xa` |
+| 读 `/run/secrets` Permission denied | `stat ~/xa/secrets/*` | 适当放宽文件「其他用户可读」，或核对 `user: "1000:1000"` |
 | 端口占用 | `ss -lnt \| grep 18789` | 停掉另一套占用 18789 的 compose，或改宿主端口 |
 
 干净拉起（不删数据目录）：
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose down
 docker compose up -d
 docker compose ps
-docker logs --tail 80 --timestamps aidy-gateway
+docker logs --tail 80 --timestamps xa-gateway
 ```
 
 <a id="sec-12-3" name="sec-12-3"></a>
@@ -1494,24 +1494,24 @@ docker logs --tail 80 --timestamps aidy-gateway
 | 现象 | 先跑 | 处理文档 |
 | --- | --- | --- |
 | `/healthz` 不通但容器 Up | [第 3.3](#sec-03-3)、[3.5](#sec-03-5) 节 | `bind` 必须是 `lan`；entrypoint 与 json 一致 |
-| `meta: Invalid input` | `grep -n meta ~/aidy/config/openclaw.json` | 安装手册 5.0，只删 `handoffTemplate` 等非法键 |
-| `plugin path not found` / `unknown channel id: wecom` | `ls ~/aidy/extensions` | 安装手册 5.5 或企微指南 |
-| `plugin path not found: .../oa-workflow-bridge` | `ls ~/aidy/extensions` | 路径必须是 `oa-workflow-bridge-redis`（OA Redis 手册 5.1）；旧 id 不要留 |
+| `meta: Invalid input` | `grep -n meta ~/xa/config/openclaw.json` | 安装手册 5.0，只删 `handoffTemplate` 等非法键 |
+| `plugin path not found` / `unknown channel id: wecom` | `ls ~/xa/extensions` | 安装手册 5.5 或企微指南 |
+| `plugin path not found: .../oa-workflow-bridge` | `ls ~/xa/extensions` | 路径必须是 `oa-workflow-bridge-redis`（OA Redis 手册 5.1）；旧 id 不要留 |
 | Gateway Up 但 `autostart suppressed` | [第 3.5 节](#sec-03-5)日志 | **[第 11.4 节](#sec-11-4)** RPC 覆盖或等 5 分钟；不要 `channels start --channel` |
 | 企微收不到 | [第 3.4 节](#sec-03-4) channels + [第 4.2 节](#sec-04-2) wecom grep | 企微指南第 13 节；`allowFrom` 测试环境含 `"*"` |
 | 发出去很久才回 | [第 4.2 节](#sec-04-2) `model-fetch` / `kind=final` | 百炼指南 §2.4、§6.7；企微指南 7.4 |
-| `Unknown model` / unresolved | `cat ~/aidy/secrets/model_ref.txt; echo` | 前缀必须等于 json 里 `providers` 键名 |
+| `Unknown model` / unresolved | `cat ~/xa/secrets/model_ref.txt; echo` | 前缀必须等于 json 里 `providers` 键名 |
 | `docker exec` 报 Missing env var | — | 可忽略，或用[第 3.4 节](#sec-03-4)带 `-e` 的命令 |
 | OA 预检失败 | 见下方 | 未配 OA 凭据或未按 4.2 装 `redis` 包；规则包与 `active` 见 OA Redis 手册第 10 节 |
-| 员工「确认准备失败」/ 日志 `Cannot find package 'redis'` | `ls ~/aidy/extensions/*/node_modules/redis` | OA Redis 手册 4.2：现网已装齐；备份恢复或漏装适配器时两包都要重装，再 `compose up -d` |
-| docker logs 出现 `smartsheet_get_records` | `grep alsoAllow ~/aidy/config/openclaw.json` | WeCom 手册 9.2；现网旁路已清。不要为 OA 去重新授权文档 |
+| 员工「确认准备失败」/ 日志 `Cannot find package 'redis'` | `ls ~/xa/extensions/*/node_modules/redis` | OA Redis 手册 4.2：现网已装齐；备份恢复或漏装适配器时两包都要重装，再 `compose up -d` |
+| docker logs 出现 `smartsheet_get_records` | `grep alsoAllow ~/xa/config/openclaw.json` | WeCom 手册 9.2；现网旁路已清。不要为 OA 去重新授权文档 |
 | 员工「还不能提交到 OA」/ `OA_IDENTITY_NOT_CONFIGURED` | `docker logs` grep 不到该码是预期 | 身份适配器说明 10.7：先看 `WECOM_IDENTITY_FILES_OK` / `INJECTED`，再抽会话 jsonl |
 | 员工「OA 需要人工核对」/ `RECONCILIATION_REQUIRED` | Redis pending 为 `unknown` 或卡在 `submitting` | **[第 12.5 节](#sec-12-5)** 对账；禁止再点确认 |
 
 OA 只读预检（**不会建单**）：
 
 ```bash
-docker exec -it aidy-gateway node \
+docker exec -it xa-gateway node \
   /home/node/.openclaw/extensions/oa-workflow-bridge-redis/scripts/readonly-preflight.mjs
 ```
 
@@ -1526,14 +1526,14 @@ docker exec -it aidy-gateway node \
 #### A. 容器在 Restarting
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose ps -a
-docker logs --tail 200 --timestamps aidy-gateway
+docker logs --tail 200 --timestamps xa-gateway
 docker compose down
-# 按日志改 ~/aidy/config/openclaw.json 后：
+# 按日志改 ~/xa/config/openclaw.json 后：
 docker compose up -d
 docker compose ps
-docker logs --tail 80 --timestamps aidy-gateway
+docker logs --tail 80 --timestamps xa-gateway
 ```
 
 日志是 `plugin path not found: .../oa-workflow-bridge`：json 的 allow / paths / entries 改成 `oa-workflow-bridge-redis`（见 OA Redis 手册 5.1），再 `up -d`。`Restarting` 时不要 `docker exec`。
@@ -1544,24 +1544,24 @@ docker logs --tail 80 --timestamps aidy-gateway
 
 ```bash
 curl -sS http://127.0.0.1:18789/healthz; echo
-docker logs --since 30m aidy-gateway 2>&1 | grep -Ei 'wecom|breaker|inbound|Authentication|error'
+docker logs --since 30m xa-gateway 2>&1 | grep -Ei 'wecom|breaker|inbound|Authentication|error'
 ```
 
 有 `autostart suppressed`：走 **[第 11.4 节](#sec-11-4)** RPC，不要 `compose restart`。没有熔断再重启：
 
 ```bash
-cd ~/aidy
-docker compose restart aidy-gateway
+cd ~/xa
+docker compose restart xa-gateway
 sleep 5
 docker exec -it \
-  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/aidy/secrets/gateway_token.txt)" \
-  aidy-gateway node dist/index.js channels status --channel wecom --probe
+  -e OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < ~/xa/secrets/gateway_token.txt)" \
+  xa-gateway node dist/index.js channels status --channel wecom --probe
 ```
 
 仍无 inbound：`down && up`，并确认没有第二套容器抢同一个 Bot：
 
 ```bash
-docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'aidy|18789|18790'
+docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'xa|18789|18790'
 ```
 
 <a id="sec-12-4-c" name="sec-12-4-c"></a>
@@ -1569,7 +1569,7 @@ docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'aid
 #### C. 很慢
 
 ```bash
-docker logs -f --timestamps aidy-gateway
+docker logs -f --timestamps xa-gateway
 ```
 
 看时间线：inbound → `[model-fetch] response elapsedMs=` → `kind=final` → `Reply message sent`。`[model-fetch] start` 应带 `timeoutMs=20000`。发图后若出现数秒级 `apply_media_understanding`，按百炼指南 §4.2 关掉 `tools.media` 并把 catalog `input` 收成 `["text"]`。首包到终包超过约 8 秒，按百炼指南补 `compat.thinkingFormat: "qwen"` 和 `MEMORY.md`。通道正常但客户端一直空白，按企微指南 7.4 开「思考中」（插件 ≥ 2026.7.2）。
@@ -1581,17 +1581,17 @@ docker logs -f --timestamps aidy-gateway
 ```bash
 df -h
 docker system df
-du -sh ~/aidy/* | sort -h
-sudo ls -lh "$(docker inspect -f '{{.LogPath}}' aidy-gateway)"
+du -sh ~/xa/* | sort -h
+sudo ls -lh "$(docker inspect -f '{{.LogPath}}' xa-gateway)"
 ```
 
-先按[第 4.4](#sec-04-4) / [10.2](#sec-10-2) 节处理容器日志和悬空镜像。容器日志已轮转；盘仍满多半是会话 jsonl 或两处 `media/inbound`。inbound 走[第 10.4 节](#sec-10-4) cron（满 24 小时），不要手删、不要删 ledger。再按[第 10.3 节](#sec-10-3)考虑 VHDX。不要删整个 `~/aidy/workspace` 或 `redis-data` 来腾地方。
+先按[第 4.4](#sec-04-4) / [10.2](#sec-10-2) 节处理容器日志和悬空镜像。容器日志已轮转；盘仍满多半是会话 jsonl 或两处 `media/inbound`。inbound 走[第 10.4 节](#sec-10-4) cron（满 24 小时），不要手删、不要删 ledger。再按[第 10.3 节](#sec-10-3)考虑 VHDX。不要删整个 `~/xa/workspace` 或 `redis-data` 来腾地方。
 
 <a id="sec-12-4-e" name="sec-12-4-e"></a>
 
 #### E. 误执行了 prune / down -v
 
-`docker compose down` **默认不删** 绑定挂载的 `~/aidy/config` 等。`down -v` 会删 **compose 声明的 named volume**。当前安装手册用的是绑定挂载，一般还在；Redis 若改成 named volume，先看有没有备份。有备份走[第 6.3 节](#sec-06-3)。没有备份不要再 `prune --volumes`。
+`docker compose down` **默认不删** 绑定挂载的 `~/xa/config` 等。`down -v` 会删 **compose 声明的 named volume**。当前安装手册用的是绑定挂载，一般还在；Redis 若改成 named volume，先看有没有备份。有备份走[第 6.3 节](#sec-06-3)。没有备份不要再 `prune --volumes`。
 
 <a id="sec-12-5" name="sec-12-5"></a>
 
@@ -1608,22 +1608,22 @@ OA 明确拒绝（`failed` / `OA_CREATE_REJECTED`）不是这条：那张确认�
 确认号从当轮会话 jsonl 或员工刚收到的失败回执里取（`confirmationId`，形如 `OA-…`）。前缀以现网 `bridge-config.json` 的 `redis.keyPrefix` 为准，仓库默认 `oa-workflow-bridge`。
 
 ```bash
-cd ~/aidy-redis
+cd ~/xa-redis
 # 密码只在容器内读 secret，不要打印出来
 CID='OA-把确认号贴这里'
 
-docker exec -it aidy-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:idx:confirmation:'"$CID"'"'
+docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:idx:confirmation:'"$CID"'"'
 # 上一步得到内部工单号 IT-… 后：
 TID='IT-把工单号贴这里'
-docker exec -it aidy-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:pending:'"$CID"'"'
-docker exec -it aidy-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:ledger:'"$TID"'"'
+docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:pending:'"$CID"'"'
+docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:ledger:'"$TID"'"'
 ```
 
 pending JSON 里有 `identity`、`submissionState`（`unknown` 或卡死的 `submitting`）、`oaRequesterId`。再用这个 `identity` 点查占位：
 
 ```bash
 IDENT='pending 里的 identity'
-docker exec -it aidy-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:person-pending:'"$IDENT"'"'
+docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 GET "oa-workflow-bridge:person-pending:'"$IDENT"'"'
 ```
 
 只看这四把钥匙。不要打印 OA 密码，不要 `DEL ledger`。
@@ -1639,8 +1639,8 @@ docker exec -it aidy-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_passwor
 ```bash
 # 先备份这四条 GET 的原文，再改
 # SET ledger 的 JSON：status=submitted，补 requestId，confirmationId / identity / session / externalTicketId 与原来一致
-docker exec -it aidy-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DEL "oa-workflow-bridge:pending:'"$CID"'"'
-docker exec -it aidy-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DEL "oa-workflow-bridge:person-pending:'"$IDENT"'"'
+docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DEL "oa-workflow-bridge:pending:'"$CID"'"'
+docker exec -it xa-redis sh -c 'PASS=$(tr -d "\n" < /run/secrets/redis_password); redis-cli -a "$PASS" -n 0 DEL "oa-workflow-bridge:person-pending:'"$IDENT"'"'
 # pending-idx 键是 oa-workflow-bridge:pending-idx:{identity}:{session}，session 在 pending JSON 里
 ```
 
@@ -1666,7 +1666,7 @@ Gateway 在「正在提交」时崩溃、Redis 仍停在 `submitting`，也走�
 
 ## 13. 建议补进 compose 的运维项
 
-日志轮转已写入现网与安装手册默认 yml（[第 13.2 节](#sec-13-2)）。下面 **[13.1](#sec-13-1) / [13.3](#sec-13-3) / [13.4](#sec-13-4)** 仍须改 yml 才生效。改完必须 `cd ~/aidy && docker compose down && docker compose up -d`。先备份 yml。
+日志轮转已写入现网与安装手册默认 yml（[第 13.2 节](#sec-13-2)）。下面 **[13.1](#sec-13-1) / [13.3](#sec-13-3) / [13.4](#sec-13-4)** 仍须改 yml 才生效。改完必须 `cd ~/xa && docker compose down && docker compose up -d`。先备份 yml。
 
 <a id="sec-13-1" name="sec-13-1"></a>
 
@@ -1692,15 +1692,15 @@ Gateway 在「正在提交」时崩溃、Redis 仍停在 `submitting`，也走�
 加完后检查：
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose down
 docker compose up -d
 sleep 20
-docker inspect -f '{{.State.Health.Status}}' aidy-gateway
+docker inspect -f '{{.State.Health.Status}}' xa-gateway
 docker compose ps
 ```
 
-期望 `healthy`。一直 `starting`：看 `docker inspect aidy-gateway --format '{{json .State.Health}}'` 和启动是否慢于 `start_period`。
+期望 `healthy`。一直 `starting`：看 `docker inspect xa-gateway --format '{{json .State.Health}}'` 和启动是否慢于 `start_period`。
 
 <a id="sec-13-2" name="sec-13-2"></a>
 
@@ -1761,18 +1761,18 @@ docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 | 约束 | 命令上怎么体现 |
 | --- | --- |
 | 同一企微 Bot 只能一个 Gateway | 不要同时 `up` 两套挂了同一 `wecom_bot_*.txt` 的目录 |
-| 每套独立目录 | `cd ~/aidy` 与 `cd ~/aidy-hr` 分别操作，不要串 compose 文件 |
+| 每套独立目录 | `cd ~/xa` 与 `cd ~/xa-hr` 分别操作，不要串 compose 文件 |
 | 端口 | IT `18789`，HR `18790`，测试 `18791` |
 | Redis 共用 | 不同 `database` / `keyPrefix`；禁止 `FLUSHALL` |
 
 第二套日常命令示例：
 
 ```bash
-cd ~/aidy-hr
+cd ~/xa-hr
 docker compose ps
 curl -sS http://127.0.0.1:18790/healthz; echo
-docker logs --tail 80 --timestamps aidy-hr-gateway
-docker exec -it aidy-hr-gateway node dist/index.js gateway status --deep
+docker logs --tail 80 --timestamps xa-hr-gateway
+docker exec -it xa-hr-gateway node dist/index.js gateway status --deep
 ```
 
 [← 13. 建议补进 compose 的运维项](#sec-13) · [↑ 目录](#toc) · [下一节 → 15. 安全运维](#sec-15)
@@ -1785,21 +1785,21 @@ docker exec -it aidy-hr-gateway node dist/index.js gateway status --deep
 
 ```bash
 # secret 权限
-chmod 600 ~/aidy/secrets/*.txt
-sudo chown 1000:1000 ~/aidy/secrets/*.txt
-stat -c '%a %U %G %n' ~/aidy/secrets/*.txt
+chmod 600 ~/xa/secrets/*.txt
+sudo chown 1000:1000 ~/xa/secrets/*.txt
+stat -c '%a %U %G %n' ~/xa/secrets/*.txt
 
 # json 里不应出现明文 Key / 完整 URL（占位符 ${VAR} 除外）
-grep -nE 'sk-|apiKey.: ."([^$]|https://)' ~/aidy/config/openclaw.json || echo "openclaw.json 未扫到明文 apiKey"
+grep -nE 'sk-|apiKey.: ."([^$]|https://)' ~/xa/config/openclaw.json || echo "openclaw.json 未扫到明文 apiKey"
 
 # 监听范围：容器内应是 lan，不要把 18789 映射到公网
-docker port aidy-gateway
+docker port xa-gateway
 ss -lnt | grep 18789
 ```
 
 Windows 防火墙：若必须让局域网访问 `18789`，只放行可信网段。`gateway.bind` 为 `lan` 时，token 必须是强随机值（安装手册用 `openssl rand -base64 32`）。
 
-测试环境用测试机器人，不要把生产 BotSecret 放进 `~/aidy-staging`。
+测试环境用测试机器人，不要把生产 BotSecret 放进 `~/xa-staging`。
 
 [← 14. 多套环境时注意](#sec-14) · [↑ 目录](#toc) · [下一节 → 16. 打印用巡检表](#sec-16)
 
@@ -1821,7 +1821,7 @@ Windows 防火墙：若必须让局域网访问 `18789`，只放行可信网段�
 
 | 步 | 操作 | 通过 |
 | --- | --- | --- |
-| 1 | `cd ~/aidy && docker compose ps` | `Up` |
+| 1 | `cd ~/xa && docker compose ps` | `Up` |
 | 2 | `curl -sS http://127.0.0.1:18789/healthz` | `"ok":true` |
 | 3 | RestartCount 未持续增加 | ☐ |
 | 4 | 日志无 `Invalid config` / `breaker tripped` | ☐ |
@@ -1833,8 +1833,8 @@ Windows 防火墙：若必须让局域网访问 `18789`，只放行可信网段�
 
 | 步 | 操作 | 通过 |
 | --- | --- | --- |
-| 1 | `docker stats --no-stream aidy-gateway` | 未顶满 |
-| 2 | `docker system df` 与 `du -sh ~/aidy` | 增长可解释 |
+| 1 | `docker stats --no-stream xa-gateway` | 未顶满 |
+| 2 | `docker system df` 与 `du -sh ~/xa` | 增长可解释 |
 | 2b | 两处 inbound `du` + `inbound-prune.log` | [第 10.4 节](#sec-10-4) cron 在跑 |
 | 3 | `stat` secrets 为 `600` | ☐ |
 | 4 | `MEMORY.md` 存在 | ☐ |
@@ -1863,7 +1863,7 @@ Windows 防火墙：若必须让局域网访问 `18789`，只放行可信网段�
 
 | 文档 | 何时去看 |
 | --- | --- |
-| [Aidy 现网加固与演进全景.md](Aidy 现网加固与演进全景.md) | OA 主路径、切入范围、各层 I/O |
+| [xA 现网加固与演进全景.md](xA 现网加固与演进全景.md) | OA 主路径、切入范围、各层 I/O |
 | [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw Gateway WSL2-Docker 安装手册.md) | 工位 WSL2 安装、secrets 契约、拉镜像方案 A/B、容量扩展（不要复制同 Bot） |
 | [OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md) | 内网 Linux 服务器安装；防火墙 / SSH 隧道；方案 B 用服务器自己的代理 |
 | [WeCom 通道插件接入手册.md](WeCom 通道插件接入手册.md) | 通道、allowFrom、思考中占位、插件升级 |

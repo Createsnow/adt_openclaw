@@ -1,6 +1,6 @@
 # Redis OA 流程解析（小白版）
 
-适用对象：已经听说 Aidy 用工单走 OA，但还不清楚 **Redis 里到底存了什么** 的同事。
+适用对象：已经听说 xA 用工单走 OA，但还不清楚 **Redis 里到底存了什么** 的同事。
 
 部署命令、YAML、错误码、启停顺序仍以 [OA Workflow Bridge（Redis）接入手册.md](OA%20Workflow%20Bridge（Redis）接入手册.md) 为准。节点图与 hop 以 [OA插件与Redis链路.md](OA插件与Redis链路.md) 为准。身份转换步骤以 [身份适配器说明.md](身份适配器说明.md) 为准。
 
@@ -12,7 +12,7 @@
 
 ## 1. 先记住一件事
 
-员工在企微说话时，Aidy **不会立刻建 OA**。它先在 Redis 里放一张「待你确认」的纸条；你回复「确认提交」后，插件才去 Ecology 建流程 602。
+员工在企微说话时，xA **不会立刻建 OA**。它先在 Redis 里放一张「待你确认」的纸条；你回复「确认提交」后，插件才去 Ecology 建流程 602。
 
 Redis 只管这几张纸条。附件文件、OA HTTP、企微转换都不进 Redis。
 
@@ -32,7 +32,7 @@ redis = {
 
 本项目业务路径一共只用 **10 种钥匙**（桥接 8 把 + 身份 2 把），没有别的。前缀默认是 `oa-workflow-bridge`（插件 id 虽带 `-redis`，钥匙前缀默认不带）。
 
-现网容器里不要用 `127.0.0.1` 连 Redis，要连独立实例主机名（文档是 `aidy-redis:6379`）。业务路径禁止用 `KEYS *` / `SCAN` 扫全库，只能点查这一张工单的钥匙。
+现网容器里不要用 `127.0.0.1` 连 Redis，要连独立实例主机名（文档是 `xa-redis:6379`）。业务路径禁止用 `KEYS *` / `SCAN` 扫全库，只能点查这一张工单的钥匙。
 
 ---
 
@@ -53,7 +53,7 @@ redis = {
 | **idmiss** | 「这个人最近查失败了」。10 分钟内不要再打企微/人事。 |
 | **mappingCode** | 把加密的企微 userid 做 SHA-256，只取前 24 位十六进制。这是查找键，**不是工号、不是姓名**。 |
 | **confirmationId** | 一次性确认单号，形如 `OA-XXXX-YYYY`。只有原发送人能确认（换了 OpenClaw 会话也可以）。 |
-| **externalTicketId** | 插件生成的 Aidy 内部幂等号，形如 `IT-20260904-112700-ABCD`。员工可见工单编号是 OA 的数字 `requestId`。 |
+| **externalTicketId** | 插件生成的 xA 内部幂等号，形如 `IT-20260904-112700-ABCD`。员工可见工单编号是 OA 的数字 `requestId`。 |
 | **GET / SET / DEL** | 读一把钥匙 / 写一把钥匙 / 删一把钥匙。 |
 | **SET EX / SET PX** | 写入时带过期秒数 / 毫秒数。身份缓存用 `EX`；pending 用 `PX` 兜底；ledger / idx **不用**。 |
 | **TTL** | Time To Live，钥匙多久自动消失。 |
@@ -90,7 +90,7 @@ oa-workflow-bridge:idmiss:{mappingCode}                ← 短错误码
 | 企微加密 userid | `woFAKEOPENUSERIDEXAMPLE0001` |
 | mappingCode / identity | `103417dabf1825e4b03b03e0`（对上面做 SHA-256，取前 24 位） |
 | 会话哈希 session | `e8b9b86e9fbc3f999572922e` |
-| Aidy 工单号 | `IT-20260904-112700-A1B2` |
+| xA 工单号 | `IT-20260904-112700-A1B2` |
 | 确认单号 | `OA-M9K2H1-AABBCCDDEEFF0011` |
 | OA 人员数字 id | `4357` |
 
@@ -513,6 +513,6 @@ Redis 读写在 Node：`oa-workflow-bridge-redis/src/state-store.mjs`、`tool.mj
 | [OA Workflow Bridge（Redis）接入手册.md](OA%20Workflow%20Bridge（Redis）接入手册.md) | 部署、工具契约、错误码、Key 生命周期；**3.3.1 `SUBMITTED` 后删留** |
 | [身份适配器说明.md](身份适配器说明.md) | miss 路径、凭据注入 |
 | [企微到OA身份与数据流.md](企微到OA身份与数据流.md) | appid / 调用者 / 申请人、通道字段 |
-| [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) | 全景：哪些进 OA / 不进 |
+| [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) | 全景：哪些进 OA / 不进 |
 | [工单会话隔离与资料回收场景.md](工单会话隔离与资料回收场景.md) | 同一人跨会话只能确认/取消，不能补件/开新单 |
 | [../Redis 独立实例部署手册.md](../Redis%20独立实例部署手册.md) | 独立 Redis、AOF、密码分边 |

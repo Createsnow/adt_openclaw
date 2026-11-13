@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Aidy IT service desk OA bridge with Redis-backed pending and ledger",
+  "description": "xA IT service desk OA bridge with Redis-backed pending and ledger",
   "openclaw": {
     "extensions": [
       "./index.mjs"

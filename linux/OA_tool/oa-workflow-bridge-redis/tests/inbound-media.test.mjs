@@ -82,7 +82,7 @@ test("media://inbound URI 解析到 stateDir 下的 inbound 文件", async () =>
   const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
   const os = await import("node:os");
   const path = await import("node:path");
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-media-uri-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-media-uri-"));
   try {
     const inbound = path.join(stateDir, "media", "inbound");
     await mkdir(inbound, { recursive: true });
@@ -242,7 +242,7 @@ test("同一原名不同 uuid 但字节相同的 inbound 副本只算一份", as
   const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
   const os = await import("node:os");
   const path = await import("node:path");
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-media-dup-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-media-dup-"));
   try {
     const inbound = path.join(stateDir, "media", "inbound");
     await mkdir(inbound, { recursive: true });
@@ -263,7 +263,7 @@ test("同一原名但内容不同的两份文件仍算两份", async () => {
   const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
   const os = await import("node:os");
   const path = await import("node:path");
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-media-two-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-media-two-"));
   try {
     const inbound = path.join(stateDir, "media", "inbound");
     await mkdir(inbound, { recursive: true });

@@ -1,10 +1,10 @@
-# Aidy 提示词规则优化说明
+# xA 提示词规则优化说明
 
-适用对象：要改工作区规则、把规则包同步到 `~/aidy/workspace/`、或给 `openclaw.json` 加 `skipBootstrap` 的工程师。`oa_workflow` 错误码、身份适配、Compose 启停仍以各专项手册为准，本文不重复。
+适用对象：要改工作区规则、把规则包同步到 `~/xa/workspace/`、或给 `openclaw.json` 加 `skipBootstrap` 的工程师。`oa_workflow` 错误码、身份适配、Compose 启停仍以各专项手册为准，本文不重复。
 
 **本文只讲：** 提示词规则为什么改、改完怎么加载、关键词与确认口令、插件如何硬拦「类型 × 系统」、以及 `skipBootstrap` 怎么加。2026-09-04 起热路径**不再** `read` 状态卡 / 区域映射 / 本机台账：全部运行规则写进已注入的 `AGENTS.md`，幂等看 `oa_workflow`。
 
-规则正文在 `openclaw/workspace-rules/`（人编映射另见 `openclaw/MAPPING_RULES.md` 等）。全景流程见 [Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md)。`openclaw.json` 字段见 [openclaw.json 配置参考.md](../openclaw.json%20配置参考.md)。阅读顺序见 [README.md](../README.md)。
+规则正文在 `openclaw/workspace-rules/`（人编映射另见 `openclaw/MAPPING_RULES.md` 等）。全景流程见 [xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md)。`openclaw.json` 字段见 [openclaw.json 配置参考.md](../openclaw.json%20配置参考.md)。阅读顺序见 [README.md](../README.md)。
 
 对照官方：[Agent workspace](https://docs.openclaw.ai/concepts/agent-workspace)、[Agent runtime](https://docs.openclaw.ai/concepts/agent)、[config-agents — skipBootstrap](https://docs.openclaw.ai/gateway/config-agents)。
 
@@ -64,8 +64,8 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 | `ROUTING_RULES.md` | 类型 → 系统名清单（人编；须同步 `AGENTS.md`；Agent 不 read） |
 | `REGION_MAPPING.md` | 部门 → 区域（人编；须同步 `AGENTS.md`；Agent 不 read） |
 | `TICKET_SCHEMA.md` | 工单号与 draft 约束（人编；须同步 `AGENTS.md`；Agent 不 read） |
-| `TICKET_STATUS_BANNER.md` | 回执码 → 模板块对照（人读；须同步 `AGENTS.md` / `Aidy企微回复模板.md`；Agent 不 read） |
-| `Aidy企微回复模板.md` | 员工可见全文（人编；须同步 `AGENTS.md`「用户可见回复」；Agent 不 read） |
+| `TICKET_STATUS_BANNER.md` | 回执码 → 模板块对照（人读；须同步 `AGENTS.md` / `xA企微回复模板.md`；Agent 不 read） |
+| `xA企微回复模板.md` | 员工可见全文（人编；须同步 `AGENTS.md`「用户可见回复」；Agent 不 read） |
 | `USER.md` | 多用户服务台，不建个人画像 |
 | `HEARTBEAT.md` | 心跳不建单、不联系员工 |
 | `MEMORY.md` | 短索引；禁止写入凭据 / SenderId / `confirmationId`；Agent 不要再读 |
@@ -113,7 +113,7 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 
 **待确认口令**只在没有当场提交口吻、且 `prepare` 已成功、正等待确认时生效。追问地点或补字段时，「好的」「可以」「不用了」只是在回答问题，不是提交；那里的数字按地点序号认（`1` 智园 … `6` 泗洪），不是确认口令。
 
-员工确认卡不要写工单类型 / 所属系统；`💬 问题：` 只抄回执 `summary`（原话开头，长的带 `...`），不要贴 `problemDescription`。头行必须是 `📋 **当前工单**`（`**` 不要省）。问题 / 地点 / 附件写完后必须空一行，再写补充引导句（不要编号），再空一行，再写 `---`，再空一行，再写 `**请回复**`；`---` 紧贴上一行时字会变大。缺 `---` 或写成「请回复」都是错的。到 `2. 取消` 结束，不要 24 小时，不要写成 `3. 补充`，不要问「还需要补充吗」。差必填用 `📝 **当前工单**`，不要和确认卡混用。固定正文见 `Aidy企微回复模板.md`（运行时在 `AGENTS.md`）。差地点先回显再问：`📝 已记下：电脑死机。` + 园区 1–6。本会话确认卡：
+员工确认卡不要写工单类型 / 所属系统；`💬 问题：` 只抄回执 `summary`（原话开头，长的带 `...`），不要贴 `problemDescription`。头行必须是 `📋 **当前工单**`（`**` 不要省）。问题 / 地点 / 附件写完后必须空一行，再写补充引导句（不要编号），再空一行，再写 `---`，再空一行，再写 `**请回复**`；`---` 紧贴上一行时字会变大。缺 `---` 或写成「请回复」都是错的。到 `2. 取消` 结束，不要 24 小时，不要写成 `3. 补充`，不要问「还需要补充吗」。差必填用 `📝 **当前工单**`，不要和确认卡混用。固定正文见 `xA企微回复模板.md`（运行时在 `AGENTS.md`）。差地点先回显再问：`📝 已记下：电脑死机。` + 园区 1–6。本会话确认卡：
 
 ```text
 📋 **当前工单**
@@ -182,7 +182,7 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 
 ### 5.4 最少字段即可 prepare
 
-必填：类型、系统、摘要、问题描述。电脑/打印机/网络问题另传 `location`。IT 需求另加需求类型、月节约工时。影响范围 / 发生时间 / 已尝试措施**默认不传**；员工没说就不要传，禁止写成「员工未说明」。`summary` 用员工原话开头：短的原样（如 `电脑死机`），长的截到约 20 字加 `...`（如 `4 个厂区同时用一套系统接单号...`），不要改写成另一句。`problemDescription` 只抄员工说过的问题本身：短句短抄，一次很长或断续多轮按顺序合并，不要丢掉细节，也不要贴到确认卡。地点只用于匹配所属系统并写入 `location`，**不要**写进描述。禁止「员工反馈」「现象描述」「待现场核实」「故障地点」「未进一步说明」和常识推断。提交成功后的企微正文用「已提交到 OA」块；数字 `requestId` 只放 `🎫 工单号：`，上一行回显 `💬 问题：`（抄回执 `summary`），不要再写「OA 单号」，不要补诊断建议。员工可见全文以 `Aidy企微回复模板.md` 为准。
+必填：类型、系统、摘要、问题描述。电脑/打印机/网络问题另传 `location`。IT 需求另加需求类型、月节约工时。影响范围 / 发生时间 / 已尝试措施**默认不传**；员工没说就不要传，禁止写成「员工未说明」。`summary` 用员工原话开头：短的原样（如 `电脑死机`），长的截到约 20 字加 `...`（如 `4 个厂区同时用一套系统接单号...`），不要改写成另一句。`problemDescription` 只抄员工说过的问题本身：短句短抄，一次很长或断续多轮按顺序合并，不要丢掉细节，也不要贴到确认卡。地点只用于匹配所属系统并写入 `location`，**不要**写进描述。禁止「员工反馈」「现象描述」「待现场核实」「故障地点」「未进一步说明」和常识推断。提交成功后的企微正文用「已提交到 OA」块；数字 `requestId` 只放 `🎫 工单号：`，上一行回显 `💬 问题：`（抄回执 `summary`），不要再写「OA 单号」，不要补诊断建议。员工可见全文以 `xA企微回复模板.md` 为准。
 
 ---
 
@@ -203,20 +203,20 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 
 ## 7. 把规则同步到现网 workspace
 
-本仓库规则在 `openclaw/workspace-rules/`。现网工作区是 `~/aidy/workspace/`（容器 `/home/node/.openclaw/workspace`）。
+本仓库规则在 `openclaw/workspace-rules/`。现网工作区是 `~/xa/workspace/`（容器 `/home/node/.openclaw/workspace`）。
 
 ```bash
 # 在 WSL 家目录；不要覆盖已有 memory/ticket-ledger.md 时先备份
 REPO=/mnt/f/workspace/ADK-OFFICE/openclaw/linux
-cp -a ~/aidy/workspace/memory/ticket-ledger.md /tmp/ticket-ledger.md.bak 2>/dev/null || true
-cp -r "$REPO/openclaw/workspace-rules/." ~/aidy/workspace/
+cp -a ~/xa/workspace/memory/ticket-ledger.md /tmp/ticket-ledger.md.bak 2>/dev/null || true
+cp -r "$REPO/openclaw/workspace-rules/." ~/xa/workspace/
 cp "$REPO/openclaw/MAPPING_RULES.md" "$REPO/openclaw/ROUTING_RULES.md" \
    "$REPO/openclaw/REGION_MAPPING.md" "$REPO/openclaw/TICKET_SCHEMA.md" \
    "$REPO/openclaw/TICKET_STATUS_BANNER.md" "$REPO/openclaw/OA_WORKFLOW_CONTRACT.md" \
-   ~/aidy/workspace/
+   ~/xa/workspace/
 # 若上面备份了台账，再拷回去
-test -f /tmp/ticket-ledger.md.bak && cp /tmp/ticket-ledger.md.bak ~/aidy/workspace/memory/ticket-ledger.md
-sudo chown -R 1000:1000 ~/aidy/workspace
+test -f /tmp/ticket-ledger.md.bak && cp /tmp/ticket-ledger.md.bak ~/xa/workspace/memory/ticket-ledger.md
+sudo chown -R 1000:1000 ~/xa/workspace
 ```
 
 `REPO` 换成本仓库路径。插件侧同时更新：
@@ -238,7 +238,7 @@ sudo chown -R 1000:1000 ~/aidy/workspace
 - **不做：** 不会停止注入**已有**规则。`AGENTS.md` 等仍进入 system prompt，这是需要的。
 - **不要**设 `agents.defaults.contextInjection: "never"`。那会让工作区规则整包不进模型。
 
-加开关前，确认 `~/aidy/workspace/` 已有第 7 节那套文件（含 `USER.md` / `HEARTBEAT.md` / `MEMORY.md`）。`skipBootstrap` 只阻止自动生成，不会替你补文件。
+加开关前，确认 `~/xa/workspace/` 已有第 7 节那套文件（含 `USER.md` / `HEARTBEAT.md` / `MEMORY.md`）。`skipBootstrap` 只阻止自动生成，不会替你补文件。
 
 ### 8.2 加在哪
 
@@ -246,7 +246,7 @@ sudo chown -R 1000:1000 ~/aidy/workspace
 
 `bootstrapMaxChars` 和 `skills` **defaults 与 `itservicedeskagent` 都要写**。只写 defaults 时，2026.9.2 对已绑定 Agent 仍可能用内置默认（单文件 20000、Skill 不限制）。`/context detail` 的 tip 指向的是 `agents.entries.<id>.bootstrapMaxChars`，不是只改 defaults。
 
-现网文件：`~/aidy/config/openclaw.json` → 容器内 `/home/node/.openclaw/openclaw.json`。改 git 仓库里的模板**不会**自动进容器。OpenClaw 2026.9.2 用 `agents.entries`（键名即 Agent id），不再用 `agents.list[]`。现网样例见配置参考第 15 节：
+现网文件：`~/xa/config/openclaw.json` → 容器内 `/home/node/.openclaw/openclaw.json`。改 git 仓库里的模板**不会**自动进容器。OpenClaw 2026.9.2 用 `agents.entries`（键名即 Agent id），不再用 `agents.list[]`。现网样例见配置参考第 15 节：
 
 ```json
 "agents": {
@@ -260,7 +260,7 @@ sudo chown -R 1000:1000 ~/aidy/workspace
       "name": "ITServiceDeskAgent",
       "workspace": "/home/node/.openclaw/workspace",
       "agentDir": "/home/node/.openclaw/agents/itservicedeskagent/agent",
-      "model": "${AIDY_DOMESTIC_MODEL_REF}",
+      "model": "${XA_DOMESTIC_MODEL_REF}",
       "bootstrapMaxChars": 40000,
       "skills": []
     }
@@ -273,10 +273,10 @@ sudo chown -R 1000:1000 ~/aidy/workspace
 ### 8.3 校验
 
 ```bash
-docker exec -it aidy-gateway node dist/index.js config validate
+docker exec -it xa-gateway node dist/index.js config validate
 ```
 
-通过即可。多数字段热加载，新会话生效；`validate` 报错或行为没变再 `restart` Gateway。容器名以 `compose ps` 为准，不一定是 `aidy-gateway`。
+通过即可。多数字段热加载，新会话生效；`validate` 报错或行为没变再 `restart` Gateway。容器名以 `compose ps` 为准，不一定是 `xa-gateway`。
 
 ### 8.4 现网已截断：加 `bootstrapMaxChars`
 
@@ -293,8 +293,8 @@ docker exec -it aidy-gateway node dist/index.js config validate
 
 改完后按这个顺序，缺一步都会看起来「不生效」：
 
-1. 改的是 **`~/aidy/config/openclaw.json`**（容器内 `/home/node/.openclaw/openclaw.json`），不是文档仓库里的副本。
-2. `docker exec -it aidy-gateway grep -n bootstrapMaxChars /home/node/.openclaw/openclaw.json` 必须出现 **两处** `40000`（defaults + itservicedeskagent）。
+1. 改的是 **`~/xa/config/openclaw.json`**（容器内 `/home/node/.openclaw/openclaw.json`），不是文档仓库里的副本。
+2. `docker exec -it xa-gateway grep -n bootstrapMaxChars /home/node/.openclaw/openclaw.json` 必须出现 **两处** `40000`（defaults + itservicedeskagent）。
 3. `config validate`，然后 **`compose restart` Gateway**（不要只靠热加载）。
 4. 企微里**单独一条**发 `/new`，再**单独一条**发 `/context detail`。旧会话会缓存截断后的 bootstrap 和 `skillsSnapshot`。`/context` 不是 inline shortcut，不能写在「帮我看下 /context detail」这种句子里。
 
@@ -304,7 +304,7 @@ docker exec -it aidy-gateway node dist/index.js config validate
 
 `skills.entries.<id>.enabled: false` 只关掉点了名的 bundled。省略 `agents.defaults.skills` 表示**不限制**。企微插件仍会把 `wecomcli-*` 注入 `<available_skills>`（现网 `/context detail` 曾 30 个、约 1 万字符）。
 
-Aidy 必须在 **`agents.defaults` 和 `agents.entries.itservicedeskagent` 两处**都写：
+xA 必须在 **`agents.defaults` 和 `agents.entries.itservicedeskagent` 两处**都写：
 
 ```json
 "skills": []
@@ -317,7 +317,7 @@ Aidy 必须在 **`agents.defaults` 和 `agents.entries.itservicedeskagent` 两�
 ## 9. 不要做的事
 
 - 不要把 `TICKET_STATUS_BANNER.md` 九套完整代码块原样粘进 `AGENTS.md`（用对照表，员工可见三行格式不变）。映射 / 路由 / 工单号 / 状态卡 / 区域已经在 `AGENTS.md`；落地后用 `/context detail` 确认未被 `bootstrapMaxChars`（默认 20000）截断。不要为了「再确认规则」在热路径 `read`。
-- 不要把 `skills.entries.*.enabled: false` 当成「全部 skill 已关」。Aidy 必须在 defaults **和** `itservicedeskagent` 都写 `skills: []`，否则企微插件的 `wecomcli-*` 仍进 system prompt。
+- 不要把 `skills.entries.*.enabled: false` 当成「全部 skill 已关」。xA 必须在 defaults **和** `itservicedeskagent` 都写 `skills: []`，否则企微插件的 `wecomcli-*` 仍进 system prompt。
 - 不要恢复已停用的回复状态栏。
 - 不要在提示词里教模型 OA 字段名、`doCreateRequest`、HTTP `requestid`、Redis 键、SHA-256。模型只认工具回执的 `code` 与 `requestId`。
 - 不要把 `wecom-oa-identity-adapter` 写入 `tools.alsoAllow`。
@@ -333,8 +333,8 @@ Aidy 必须在 **`agents.defaults` 和 `agents.entries.itservicedeskagent` 两�
 | `openclaw/workspace-rules/AGENTS.md` | 运行规则（决策树 / 硬约束 / 口令 / 映射 / 清单全集+排除 / 区域 / draft / 员工可见回复 / `## Tools`；无页脚） |
 | `openclaw/MAPPING_RULES.md` | 关键词与失败边界（人编，须同步 AGENTS.md） |
 | `openclaw/ROUTING_RULES.md` | 类型 → 系统名清单（人编，须同步 AGENTS.md） |
-| [Aidy企微回复模板.md](Aidy企微回复模板.md) | 员工可见全文；改一句必须同步 `AGENTS.md` |
+| [xA企微回复模板.md](xA企微回复模板.md) | 员工可见全文；改一句必须同步 `AGENTS.md` |
 | [OA Workflow Bridge（Redis）接入手册](../OA_tool/OA%20Workflow%20Bridge（Redis）接入手册.md) | `oa_workflow` 契约与错误码 |
 | [openclaw.json 配置参考](../openclaw.json%20配置参考.md) 第 4.2 / 15 节 | `skipBootstrap` 字段；现网 json 样例 |
 | [DashScope 兼容 Provider 配置手册](../DashScope%20兼容%20Provider%20配置手册.md) §2.5 | `MEMORY.md` 缺失导致二次 `model-fetch` |
-| [Aidy 现网加固与演进全景](../Aidy%20现网加固与演进全景.md) | 各层 I/O；工作区规则在 `prepare` 之前用完 |
+| [xA 现网加固与演进全景](../xA%20现网加固与演进全景.md) | 各层 I/O；工作区规则在 `prepare` 之前用完 |

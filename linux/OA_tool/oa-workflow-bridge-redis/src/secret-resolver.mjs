@@ -3,8 +3,8 @@
  * 身份映射走 Redis idmap，不读映射文件，不回退 DPAPI。
  */
 export const OA_SECRET_REFS = Object.freeze({
-  apiUserId: "oa/aidy-it-service/api-user-id",
-  appSecret: "oa/aidy-it-service/app-secret",
+  apiUserId: "oa/xa-it-service/api-user-id",
+  appSecret: "oa/xa-it-service/app-secret",
 });
 
 function envValue(name) {

@@ -81,16 +81,16 @@ sessionKey 或 sessionId = 当前会话标识
 
 ---
 
-## 2. 在 Aidy 中的位置（OA 范例）
+## 2. 在 xA 中的位置（OA 范例）
 
-全景见 [Aidy 现网加固与演进全景.md](Aidy%20现网加固与演进全景.md)。本节只画外部系统 Tool 插件应处的位置。
+全景见 [xA 现网加固与演进全景.md](xA%20现网加固与演进全景.md)。本节只画外部系统 Tool 插件应处的位置。
 
 ```text
 企业微信员工
     ↓
 wecom-openclaw-plugin（通道 + 可信身份 requesterSenderId）
     ↓
-Aidy Agent（itservicedeskagent）
+xA Agent（itservicedeskagent）
     ↓ 理解对话、整理 draft
 oa-workflow-bridge-redis（工具 oa_workflow）
     ├── Redis          pending / ledger（按工单点查）
@@ -101,7 +101,7 @@ oa-workflow-bridge-redis（工具 oa_workflow）
    Ecology OA（流程 602）
 ```
 
-身份（`adapter=on` + Redis `idmap`，**已验证**）在通道与桥接之间注入独立身份适配器：`user/get`（回退 `openuserid_to_userid`）→ 对齐工号 → `getHrmUserInfoWithPage` → 写回 `idmap`。适配器是 Gateway 进程内包，不是单独服务器，**不是** 模型可调 tool，也不把企微 / **用工号点查** 塞进 `oa-client.mjs`。提交前部门 / 岗位 / 地点由桥接 `hrm-profile.mjs` 调 `getHrmSimpleInfo`。见 `OA_tool/身份适配器说明.md` 与 `Aidy 现网加固与演进全景.md` 第 7 节。
+身份（`adapter=on` + Redis `idmap`，**已验证**）在通道与桥接之间注入独立身份适配器：`user/get`（回退 `openuserid_to_userid`）→ 对齐工号 → `getHrmUserInfoWithPage` → 写回 `idmap`。适配器是 Gateway 进程内包，不是单独服务器，**不是** 模型可调 tool，也不把企微 / **用工号点查** 塞进 `oa-client.mjs`。提交前部门 / 岗位 / 地点由桥接 `hrm-profile.mjs` 调 `getHrmSimpleInfo`。见 `OA_tool/身份适配器说明.md` 与 `xA 现网加固与演进全景.md` 第 7 节。
 
 | 模型负责 | 插件负责 |
 | --- | --- |
@@ -136,7 +136,7 @@ Agent 侧：即使插件已 loaded，也必须把 `oa_workflow` 加入 `tools.al
 - 不要在 `attachmentFieldName` 为空时带文档报成功。官方字段名已确认为 `scfj`。图片走 `wtxqmskftp`，不要把 png/jpg 写入 `scfj`
 - 不要在 unknown 状态自动重试 submit
 - 不要在 Docker 里执行 Windows DPAPI 脚本
-- 不要把 `~/aidy/secrets/` 提交到 git
+- 不要把 `~/xa/secrets/` 提交到 git
 - 不要把身份映射文件挂进 workspace 或 `.openclaw`
 - 不要在 `plugins.allow` 中写旧 id `oa-workflow-bridge`
 - 不要把企微转换或 **用工号点查人员 id** 注册为模型可调 tool；转换层走 `wecom-oa-identity-adapter`。提交前资料现查也不是模型 tool
@@ -147,7 +147,7 @@ Agent 侧：即使插件已 loaded，也必须把 `oa_workflow` 加入 `tools.al
 
 | 文档 | 内容 |
 | --- | --- |
-| `Aidy 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
+| `xA 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
 | `OA_tool/OA Workflow Bridge（Redis）接入手册.md` | OA 桥接架构、Key、接入、工具 API（生产主路径） |
 | `OA_tool/企微到OA身份与数据流.md` | 三种身份、Redis `idmap` |
 | `OA_tool/身份适配器说明.md` | 转换层（独立包已验证） |

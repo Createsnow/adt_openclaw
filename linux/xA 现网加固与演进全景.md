@@ -1,4 +1,4 @@
-# Aidy 现网加固与演进全景
+# xA 现网加固与演进全景
 
 员工只走企业微信。SmartX 超融合上的 Linux 虚机里 Docker 跑一套 OpenClaw Gateway。Agent 只整理文字事实，唯一可调工具是 `oa_workflow`。幂等、待确认、身份缓存在独立 Redis。图片和文件不进模型，由插件暂存后写入泛微 Ecology 流程 602。同一机器人不能横向复制当负载均衡；人变多只加机器和模型配额。再开一条业务线才起第二套 Gateway。
 
@@ -38,7 +38,7 @@ wecom 通道插件                    ← 加密 userid，无姓名/工号
     │  附件落盘 inbound；不送给模型
     ▼
 OpenClaw Gateway（单容器、单进程）
-    ├── Aidy Agent                ← 已注入 AGENTS.md；只调 oa_workflow
+    ├── xA Agent                ← 已注入 AGENTS.md；只调 oa_workflow
     ├── OA 桥接插件               ← 五 action、暂存附件、调 Ecology
     └── 身份适配器（进程内包）     ← 加密串 → OA 人员 id；不注册工具
             │
@@ -47,7 +47,7 @@ OpenClaw Gateway（单容器、单进程）
             └─► Ecology 流程 602  ← 仅确认后 doCreateRequest
 ```
 
-一套业务的持久化全在 `~/aidy`：`config`、`workspace`、`extensions`、`secrets`、`entrypoint.sh`。Redis 是另一套 compose：`~/aidy-redis`，必须先于 Gateway 启动。
+一套业务的持久化全在 `~/xa`：`config`、`workspace`、`extensions`、`secrets`、`entrypoint.sh`。Redis 是另一套 compose：`~/xa-redis`，必须先于 Gateway 启动。
 
 ---
 
@@ -55,7 +55,7 @@ OpenClaw Gateway（单容器、单进程）
 
 ## 2. 选型
 
-Aidy 现网决策如下。Docker Compose vs `openclaw --profile`、多套目录怎么扩，见 [OpenClaw Gateway 部署拓扑与选型.md](OpenClaw%20Gateway%20部署拓扑与选型.md)。
+xA 现网决策如下。Docker Compose vs `openclaw --profile`、多套目录怎么扩，见 [OpenClaw Gateway 部署拓扑与选型.md](OpenClaw%20Gateway%20部署拓扑与选型.md)。
 
 | 决策 | 选择 | 不选 |
 | --- | --- | --- |
@@ -105,8 +105,8 @@ Aidy 现网决策如下。Docker Compose vs `openclaw --profile`、多套目录�
 
 ```text
 Linux 虚机（SmartX 划出）
-├── ~/aidy-redis/     独立 Redis（AOF、密码、noeviction）
-└── ~/aidy/
+├── ~/xa-redis/     独立 Redis（AOF、密码、noeviction）
+└── ~/xa/
     ├── docker-compose.yml
     ├── config/openclaw.json      → 容器 /home/node/.openclaw
     ├── workspace/                → Agent 规则（AGENTS.md 等）
@@ -121,24 +121,24 @@ Linux 虚机（SmartX 划出）
 
 ### 宿主（SmartX）
 
-现网机器是 SmartX 超融合划出的 **Linux 虚机**，不是集群本身。Aidy 只跑在这台虚机里面。
+现网机器是 SmartX 超融合划出的 **Linux 虚机**，不是集群本身。xA 只跑在这台虚机里面。
 
 ```text
 SmartX 集群（平台运维）
  └── Linux 虚机                 ← 本系统的「宿主机」
       ├── Docker Engine
-      ├── ~/aidy-redis/
-      └── ~/aidy/
+      ├── ~/xa-redis/
+      └── ~/xa/
 ```
 
 | 谁 | 管什么 |
 | --- | --- |
 | 平台运维（SmartX） | 虚机规格（CPU / 内存 / 磁盘）、存储、VLAN / 出网、快照 |
-| 本系统 | 虚机内的 Linux、Docker、`~/aidy`、Redis、Gateway、插件与 secrets |
+| 本系统 | 虚机内的 Linux、Docker、`~/xa`、Redis、Gateway、插件与 secrets |
 
 不要把 Gateway 装进 SmartX 控制台或宿主机节点。出网（拉镜像、百炼、企微、OA）和入站端口由平台网络策略决定；18789 不要对公网开放。虚机规格不够找平台扩，不要用 compose `mem_limit` 代替加内存。
 
-注入链：宿主机 secret 文件 → Compose secrets → entrypoint `export` 大写变量 → json 只写 `${OPENCLAW_GATEWAY_TOKEN}`、`${AIDY_DOMESTIC_*}` 等。改 secret、插件路径、bind、端口必须 `compose down && up`，env 不热更。
+注入链：宿主机 secret 文件 → Compose secrets → entrypoint `export` 大写变量 → json 只写 `${OPENCLAW_GATEWAY_TOKEN}`、`${XA_DOMESTIC_*}` 等。改 secret、插件路径、bind、端口必须 `compose down && up`，env 不热更。
 
 Docker 必须 `gateway.bind: lan`。容器若只听 `loopback`，宿主机端口映射进不来。
 
@@ -167,14 +167,14 @@ Docker 必须 `gateway.bind: lan`。容器若只听 `loopback`，宿主机端口
 
 ### 时序
 
-启停先于任何员工消息：独立 Redis → `~/aidy` 注入 `${VAR}` 起 Gateway → 加载 wecom 与 OA 桥接、deny Codex。下面从第一条企微消息画到建单回执。
+启停先于任何员工消息：独立 Redis → `~/xa` 注入 `${VAR}` 起 Gateway → 加载 wecom 与 OA 桥接、deny Codex。下面从第一条企微消息画到建单回执。
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor Emp as 员工企微
   participant Ch as wecom通道
-  participant Ag as Aidy
+  participant Ag as xA
   participant Br as OA桥接
   participant Id as 身份适配器
   participant Rd as 独立Redis
@@ -212,7 +212,7 @@ sequenceDiagram
       alt 原话已是确定提交且事实已齐
         Ag->>Br: 同一轮 submit_confirmed
       else 需要确认
-        Ag-->>Emp: 确认卡（Aidy 发，不是桥接）
+        Ag-->>Emp: 确认卡（xA 发，不是桥接）
         opt 只发附件
           Emp->>Ag: 图片或文档
           Ag->>Br: attach
@@ -257,11 +257,11 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  D1["独立 Redis 先启动"] --> D2["~/aidy 注入 ${VAR} 起 Gateway"]
+  D1["独立 Redis 先启动"] --> D2["~/xa 注入 ${VAR} 起 Gateway"]
   D2 --> D3["加载 wecom + OA 桥接<br/>deny Codex"]
   D3 --> E["员工企微"]
   E --> C["通道：加密 userid<br/>附件落盘，不进模型"]
-  C --> G1["路由到 Aidy"]
+  C --> G1["路由到 xA"]
   G1 --> G2["skills 空目录<br/>alsoAllow 仅 oa_workflow<br/>deny 文件系统"]
   G2 --> G3["只用已注入 AGENTS.md<br/>禁止再 read 规则/附件/台账"]
   G3 --> R{"类型 × 系统唯一命中?"}
@@ -277,7 +277,7 @@ flowchart TD
   AD --> ST["本机暂存附件，认领 inbox"]
   ST --> P["MULTI 写 pending / ledger<br/>同一人全局一张待确认"]
   P --> Q{"原话已是确定提交且事实已齐?"}
-  Q -->|否| CARD["Aidy 发确认卡"]
+  Q -->|否| CARD["xA 发确认卡"]
   CARD --> ATT["只发附件 → attach<br/>改稿 → cancel + prepare"]
   ATT --> Q
   Q -->|是| LOCK["锁内 submitting"]
@@ -361,7 +361,7 @@ ledger 按插件生成的 `IT-YYYYMMDD-HHMMSS-XXXX` 点查，永久留下。它�
 | 产出 | 数字人员 id | 部门 / 岗位 / 地点 |
 | 失败 | 不写 pending | 退回 awaiting，不建单、不标 unknown |
 
-建单时模型只给类型、系统、摘要、文字描述（IT 需求另加需求类型与月节约工时）。插件注入申请人、部门、岗位、地点、处理人 `clry`（按所属系统配置，模型不传人员 id）。Aidy 内部工单号由插件按 Asia/Bangkok 墙钟生成 `IT-YYYYMMDD-HHMMSS-XXXX`，模型传入的一律忽略；只作 Redis 幂等键和流程标题前缀，不写入问题描述，也不展示给员工。现网建单 `otherParams.isnextflow` 取自 `bridge-config.json`（样例 `"0"`）。
+建单时模型只给类型、系统、摘要、文字描述（IT 需求另加需求类型与月节约工时）。插件注入申请人、部门、岗位、地点、处理人 `clry`（按所属系统配置，模型不传人员 id）。xA 内部工单号由插件按 Asia/Bangkok 墙钟生成 `IT-YYYYMMDD-HHMMSS-XXXX`，模型传入的一律忽略；只作 Redis 幂等键和流程标题前缀，不写入问题描述，也不展示给员工。现网建单 `otherParams.isnextflow` 取自 `bridge-config.json`（样例 `"0"`）。
 
 ---
 
@@ -408,7 +408,7 @@ ledger 按插件生成的 `IT-YYYYMMDD-HHMMSS-XXXX` 点查，永久留下。它�
 
 ### 纵向扩展
 
-同一 Bot、同一 `~/aidy`：找平台给这台 SmartX 虚机加 CPU、内存、磁盘，给百炼加模型配额。compose 当前无 `mem_limit`（那是容器限额，不是虚机规格）；加限额后若 OOM，先查日志和会话是否把盘打满。
+同一 Bot、同一 `~/xa`：找平台给这台 SmartX 虚机加 CPU、内存、磁盘，给百炼加模型配额。compose 当前无 `mem_limit`（那是容器限额，不是虚机规格）；加限额后若 OOM，先查日志和会话是否把盘打满。
 
 横向复制只用于**另一条业务 / 另一个机器人**。
 
@@ -446,14 +446,14 @@ ledger 按插件生成的 `IT-YYYYMMDD-HHMMSS-XXXX` 点查，永久留下。它�
 
 ## 10. 演进
 
-**配置中心迁 Nacos。** OpenClaw 不直连 Nacos。取数层把平台配置转成现有环境变量名，json 仍全是 `${VAR}`。推荐先做：Nacos → sync 脚本写 `secrets/*.txt` → 现有 entrypoint 不变 → `down/up`。entrypoint 启动时直拉 Nacos 是下一步，强依赖配置中心可用性。工具白名单、规则包、`load.paths`、bindings、`active` 不进配置中心。多套 `~/aidy-*` 用独立 group，禁止共用 dataId。
+**配置中心迁 Nacos。** OpenClaw 不直连 Nacos。取数层把平台配置转成现有环境变量名，json 仍全是 `${VAR}`。推荐先做：Nacos → sync 脚本写 `secrets/*.txt` → 现有 entrypoint 不变 → `down/up`。entrypoint 启动时直拉 Nacos 是下一步，强依赖配置中心可用性。工具白名单、规则包、`load.paths`、bindings、`active` 不进配置中心。多套 `~/xa-*` 用独立 group，禁止共用 dataId。
 
 **多业务扩展。** 复制 compose 并全部换新：目录、容器名、宿主端口、secrets、企微 Bot、Gateway token、agent id。示例：
 
 ```text
-~/aidy/          IT 服务台，宿主 18789
-~/aidy-hr/       另一业务，宿主 18790
-~/aidy-staging/  测试机器人，宿主 18791
+~/xa/          IT 服务台，宿主 18789
+~/xa-hr/       另一业务，宿主 18790
+~/xa-staging/  测试机器人，宿主 18791
 ```
 
 容器内端口仍是 18789。可共用一台 Redis，但必须不同 key 前缀。同一通道多 Agent 路由：先验证企微插件多账号，再在**同一个** Gateway 的 json 里加 agent 和 bindings，不要为此再起容器。

@@ -2,7 +2,7 @@
 
 > 本文档由仓库根目录原文档**重组**而来：只调整章节归属与交叉引用，**不改变**部署步骤、命令、YAML、错误码或禁止事项。阅读顺序见 [README.md](README.md)。
 
-适用对象：按 **[OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw Gateway WSL2-Docker 安装手册.md)** 或 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md)** 部署 Aidy OpenClaw Gateway，需要接入**阿里云百炼（DashScope）**大模型的工程师。工位阶段 B：第 6.4 节；Linux 服务器：第 6.1 节变量契约、第 12–13 节写入模型并第二次 `up`。
+适用对象：按 **[OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw Gateway WSL2-Docker 安装手册.md)** 或 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md)** 部署 xA OpenClaw Gateway，需要接入**阿里云百炼（DashScope）**大模型的工程师。工位阶段 B：第 6.4 节；Linux 服务器：第 6.1 节变量契约、第 12–13 节写入模型并第二次 `up`。
 
 本文档汇总百炼模型在 Docker 全注入路径下的配置思路、字段含义、验证步骤、工具调用回归与常见报错处理。与工位安装手册 **6.4 节**、Linux 服务器安装手册 **第 12–13 节** 配套使用。
 
@@ -39,7 +39,7 @@ OpenClaw 里与「模型」相关的名字有 **三层**，容易混用：
 │   models[].name           ← OpenClaw 内部展示名（必填）        │
 ├─────────────────────────────────────────────────────────────┤
 │ agents.entries.*.model    ← 完整 ref：<Provider名>/<模型id>    │
-│ secret model_ref.txt      ← 同上，通过 ${AIDY_DOMESTIC_MODEL_REF} 注入 │
+│ secret model_ref.txt      ← 同上，通过 ${XA_DOMESTIC_MODEL_REF} 注入 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,7 +54,7 @@ OpenClaw 里与「模型」相关的名字有 **三层**，容易混用：
 
 ### 1.2 `domestic` 还是 `bailian`？
 
-**都可以**，OpenClaw 不强制 Provider 名。工位 WSL2 手册默认用 **`domestic`**；Linux 服务器手册与现网样例用 **`bailian`**。环境变量前缀两边都是 `AIDY_DOMESTIC_*`，与 Provider 键名无关。
+**都可以**，OpenClaw 不强制 Provider 名。工位 WSL2 手册默认用 **`domestic`**；Linux 服务器手册与现网样例用 **`bailian`**。环境变量前缀两边都是 `XA_DOMESTIC_*`，与 Provider 键名无关。
 
 | 方案 | `openclaw.json` | `model_ref.txt` |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ OpenClaw 里与「模型」相关的名字有 **三层**，容易混用：
 
 | 字段 | 谁用 | 能否省略 |
 | --- | --- | --- |
-| `id` | 百炼 API | 否（通过 `${AIDY_DOMESTIC_MODEL_ID}` 注入） |
+| `id` | 百炼 API | 否（通过 `${XA_DOMESTIC_MODEL_ID}` 注入） |
 | `name` | OpenClaw  catalog / UI | **否**；省略会导致 `InvalidConfigError`，Gateway exit 78 反复重启 |
 
 `name` 可与 `id` 相同，或写成更易读的展示名；**不影响**实际调用的百炼模型。
@@ -101,7 +101,7 @@ API Key、Base URL、模型必须属于**同一地域**。
 api: openai-completions
 ```
 
-可写在 `openclaw.json` 固定值，也可通过 secret `model_api.txt` → `${AIDY_DOMESTIC_API}` 注入（**工位 WSL2** 手册 6.4 可选第 5 个 secret；**Linux 服务器**手册第 12 节把 `api` 写死为 `"openai-completions"`）。
+可写在 `openclaw.json` 固定值，也可通过 secret `model_api.txt` → `${XA_DOMESTIC_API}` 注入（**工位 WSL2** 手册 6.4 可选第 5 个 secret；**Linux 服务器**手册第 12 节把 `api` 写死为 `"openai-completions"`）。
 
 ### 2.3 常用模型 ID（以控制台为准）
 
@@ -154,7 +154,7 @@ Agent 上保持思考关闭（启动日志应出现 `thinking=off`）：
 "agents": {
   "entries": {
     "itservicedeskagent": {
-      "model": "${AIDY_DOMESTIC_MODEL_REF}",
+      "model": "${XA_DOMESTIC_MODEL_REF}",
       "thinkingDefault": "off"
     }
   }
@@ -167,7 +167,7 @@ Gateway 日志里的 `thinking=off` **不能代替** `compat.thinkingFormat`。�
 
 ### 2.5 必补：workspace 根目录的 `MEMORY.md`
 
-Aidy Agent 的 `tools.profile` 为 `minimal` + `alsoAllow` 仅含 `oa_workflow`（`group:fs` 已 deny，不要再开 `read`）。根目录仍须有 `MEMORY.md`，否则官方会注入 missing-file 标记。热路径**不要**再 `read` 它，也不要调用 `memory_search`。文件不存在且模型仍去读时，旧日志长这样：
+xA Agent 的 `tools.profile` 为 `minimal` + `alsoAllow` 仅含 `oa_workflow`（`group:fs` 已 deny，不要再开 `read`）。根目录仍须有 `MEMORY.md`，否则官方会注入 missing-file 标记。热路径**不要**再 `read` 它，也不要调用 `memory_search`。文件不存在且模型仍去读时，旧日志长这样：
 
 ```text
 [tools] read failed: ENOENT: no such file or directory, access '/home/node/.openclaw/workspace/MEMORY.md'
@@ -180,11 +180,11 @@ Aidy Agent 的 `tools.profile` 为 `minimal` + `alsoAllow` 仅含 `oa_workflow`�
 
 ```bash
 # 本仓库 workspace-rules 已含占位 MEMORY.md；没有则建一个
-test -f ~/aidy/workspace/MEMORY.md || printf '%s\n' '# MEMORY' > ~/aidy/workspace/MEMORY.md
-sudo chown 1000:1000 ~/aidy/workspace/MEMORY.md
+test -f ~/xa/workspace/MEMORY.md || printf '%s\n' '# MEMORY' > ~/xa/workspace/MEMORY.md
+sudo chown 1000:1000 ~/xa/workspace/MEMORY.md
 ```
 
-需要长期记忆时，把细则写进 `~/aidy/workspace/memory/` 子目录。Aidy 工单热路径**不要** `memory_search`；根目录 `MEMORY.md` 只留索引，避免每次把大文件灌进系统提示。
+需要长期记忆时，把细则写进 `~/xa/workspace/memory/` 子目录。xA 工单热路径**不要** `memory_search`；根目录 `MEMORY.md` 只留索引，避免每次把大文件灌进系统提示。
 
 ---
 
@@ -194,11 +194,11 @@ sudo chown 1000:1000 ~/aidy/workspace/MEMORY.md
 
 | 参数 | 环境变量 | secret 文件 | 示例值 |
 | --- | --- | --- | --- |
-| API Key | `AIDY_DOMESTIC_API_KEY` | `model_api_key.txt` | `sk-...`（一行，无换行） |
-| Base URL | `AIDY_DOMESTIC_BASE_URL` | `model_base_url.txt` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| 模型 ID | `AIDY_DOMESTIC_MODEL_ID` | `model_id.txt` | 以百炼控制台为准（安装手册示例 `qwen3.8-max`；现网展示名 flash） |
-| 完整 model ref | `AIDY_DOMESTIC_MODEL_REF` | `model_ref.txt` | 工位 `domestic/<id>`；现网 / Linux `bailian/<id>` |
-| API 协议（可选） | `AIDY_DOMESTIC_API` | `model_api.txt` | `openai-completions` |
+| API Key | `XA_DOMESTIC_API_KEY` | `model_api_key.txt` | `sk-...`（一行，无换行） |
+| Base URL | `XA_DOMESTIC_BASE_URL` | `model_base_url.txt` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| 模型 ID | `XA_DOMESTIC_MODEL_ID` | `model_id.txt` | 以百炼控制台为准（安装手册示例 `qwen3.8-max`；现网展示名 flash） |
+| 完整 model ref | `XA_DOMESTIC_MODEL_REF` | `model_ref.txt` | 工位 `domestic/<id>`；现网 / Linux `bailian/<id>` |
+| API 协议（可选） | `XA_DOMESTIC_API` | `model_api.txt` | `openai-completions` |
 
 **`model_ref` 规则：**
 
@@ -217,14 +217,14 @@ model_ref = <providers 键名> + "/" + <model_id 的值>
 改 secret 挂载后须重建容器（与安装手册相同，步骤未改）：
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose down
 docker compose up -d
 ```
 
 ## 4. openclaw.json 配置模板
 
-在顶层增加或合并 `models` 段；Agent 使用 `${AIDY_DOMESTIC_MODEL_REF}`：
+在顶层增加或合并 `models` 段；Agent 使用 `${XA_DOMESTIC_MODEL_REF}`：
 
 ```json
 {
@@ -232,13 +232,13 @@ docker compose up -d
     "mode": "merge",
     "providers": {
       "domestic": {
-        "baseUrl": "${AIDY_DOMESTIC_BASE_URL}",
-        "apiKey": "${AIDY_DOMESTIC_API_KEY}",
+        "baseUrl": "${XA_DOMESTIC_BASE_URL}",
+        "apiKey": "${XA_DOMESTIC_API_KEY}",
         "api": "openai-completions",
         "timeoutSeconds": 20,
         "models": [
           {
-            "id": "${AIDY_DOMESTIC_MODEL_ID}",
+            "id": "${XA_DOMESTIC_MODEL_ID}",
             "name": "qwen3.8-max",
             "reasoning": false,
             "compat": {
@@ -257,7 +257,7 @@ docker compose up -d
   "agents": {
     "entries": {
       "itservicedeskagent": {
-        "model": "${AIDY_DOMESTIC_MODEL_REF}",
+        "model": "${XA_DOMESTIC_MODEL_REF}",
         "thinkingDefault": "off",
         "workspace": "/home/node/.openclaw/workspace",
         "agentDir": "/home/node/.openclaw/agents/itservicedeskagent/agent"
@@ -267,7 +267,7 @@ docker compose up -d
 }
 ```
 
-上面把 `api` 写死为 `"openai-completions"`，与 Linux 服务器手册第 12 节及现网样例一致。**工位 WSL2 路径**另有一个变体：把 `api` 也写成占位符 `"${AIDY_DOMESTIC_API}"`，真值来自 `model_api.txt`（见 [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) 第 6.0 / 6.4.4 节）。两种写法都可用，但**同一环境只能选一种**：写死就不必挂 `model_api` secret，用占位符就必须保证 entrypoint 有 export，否则 `${AIDY_DOMESTIC_API}` 会替换成空串导致 Provider 加载失败。
+上面把 `api` 写死为 `"openai-completions"`，与 Linux 服务器手册第 12 节及现网样例一致。**工位 WSL2 路径**另有一个变体：把 `api` 也写成占位符 `"${XA_DOMESTIC_API}"`，真值来自 `model_api.txt`（见 [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) 第 6.0 / 6.4.4 节）。两种写法都可用，但**同一环境只能选一种**：写死就不必挂 `model_api` secret，用占位符就必须保证 entrypoint 有 export，否则 `${XA_DOMESTIC_API}` 会替换成空串导致 Provider 加载失败。
 
 **禁止：**
 
@@ -285,13 +285,13 @@ docker compose up -d
   "mode": "merge",
   "providers": {
     "bailian": {
-      "baseUrl": "${AIDY_DOMESTIC_BASE_URL}",
-      "apiKey": "${AIDY_DOMESTIC_API_KEY}",
+      "baseUrl": "${XA_DOMESTIC_BASE_URL}",
+      "apiKey": "${XA_DOMESTIC_API_KEY}",
       "api": "openai-completions",
       "timeoutSeconds": 20,
       "models": [
         {
-          "id": "${AIDY_DOMESTIC_MODEL_ID}",
+          "id": "${XA_DOMESTIC_MODEL_ID}",
           "name": "qwen3.8 flash",
           "reasoning": false,
           "compat": {
@@ -309,14 +309,14 @@ docker compose up -d
 }
 ```
 
-变量名仍用 `AIDY_DOMESTIC_*`（与两本安装手册变量契约一致：工位 6.0 / Linux 6.1），只改 json 里的 Provider 键和 `model_ref.txt` 前缀。
+变量名仍用 `XA_DOMESTIC_*`（与两本安装手册变量契约一致：工位 6.0 / Linux 6.1），只改 json 里的 Provider 键和 `model_ref.txt` 前缀。
 
 ### 4.2 已上线环境：补 `compat`、超时、关掉图片理解、补 `MEMORY.md`
 
-Gateway 已经在跑、只是企微回复慢或发图多等 7 秒时，**不必**重建 secrets，只改 `~/aidy/config/openclaw.json` 并补文件：
+Gateway 已经在跑、只是企微回复慢或发图多等 7 秒时，**不必**重建 secrets，只改 `~/xa/config/openclaw.json` 并补文件：
 
 ```bash
-# 1. 编辑 ~/aidy/config/openclaw.json
+# 1. 编辑 ~/xa/config/openclaw.json
 #    a) models.providers.<domestic|bailian> 上加：
 #         "timeoutSeconds": 20
 #       （与 api 同级，不是写在 models[] 条目里）
@@ -327,13 +327,13 @@ Gateway 已经在跑、只是企微回复慢或发图多等 7 秒时，**不必*
 #         "compat": { "thinkingFormat": "qwen", "supportsDeveloperRole": false }
 #
 # 2. 补 MEMORY.md
-test -f ~/aidy/workspace/MEMORY.md || printf '%s\n' '# MEMORY' > ~/aidy/workspace/MEMORY.md
-sudo chown 1000:1000 ~/aidy/workspace/MEMORY.md
+test -f ~/xa/workspace/MEMORY.md || printf '%s\n' '# MEMORY' > ~/xa/workspace/MEMORY.md
+sudo chown 1000:1000 ~/xa/workspace/MEMORY.md
 
 # 3. 校验并重启（catalog / timeoutSeconds / tools.media 需重启才稳定生效）
-docker exec -it aidy-gateway node dist/index.js config validate
-cd ~/aidy && docker compose restart
-docker compose logs aidy-gateway | grep -E "agent model|Authentication successful"
+docker exec -it xa-gateway node dist/index.js config validate
+cd ~/xa && docker compose restart
+docker compose logs xa-gateway | grep -E "agent model|Authentication successful"
 ```
 
 `config validate` 若报 `thinkingFormat` 或 `timeoutSeconds` 非法，说明当前 OpenClaw 镜像过旧，需要先升 `openclaw/openclaw` 镜像再改字段；不要删掉这些字段凑合运行。
@@ -345,8 +345,8 @@ docker compose logs aidy-gateway | grep -E "agent model|Authentication successfu
 ### 5.1 环境变量是否注入
 
 ```bash
-docker exec aidy-gateway sh -c '
-  for v in AIDY_DOMESTIC_API_KEY AIDY_DOMESTIC_BASE_URL AIDY_DOMESTIC_MODEL_ID AIDY_DOMESTIC_MODEL_REF; do
+docker exec xa-gateway sh -c '
+  for v in XA_DOMESTIC_API_KEY XA_DOMESTIC_BASE_URL XA_DOMESTIC_MODEL_ID XA_DOMESTIC_MODEL_REF; do
     eval "test -n \"\$$v\"" || { echo "MISSING:$v"; exit 1; }
   done
   echo MODEL_INJECT_OK
@@ -356,15 +356,15 @@ docker exec aidy-gateway sh -c '
 ### 5.2 配置与模型 catalog
 
 ```bash
-docker exec -it aidy-gateway node dist/index.js config validate
-docker exec -it aidy-gateway node dist/index.js models list --provider domestic
+docker exec -it xa-gateway node dist/index.js config validate
+docker exec -it xa-gateway node dist/index.js models list --provider domestic
 # Provider 键是 bailian 时改用：--provider bailian
 ```
 
 > **说明：** `docker exec` 进入的新 shell **没有** entrypoint 注入的环境变量，因此 `config validate` 可能报 `Missing env var`——属正常现象。以 Gateway **启动日志**为准：
 
 ```bash
-docker compose logs aidy-gateway | grep "agent model"
+docker compose logs xa-gateway | grep "agent model"
 # 期望: agent model: domestic/qwen3.8-max (thinking=off, fast=off)
 # 或:   agent model: bailian/qwen3.8-max (thinking=off, fast=off)
 ```
@@ -408,7 +408,7 @@ curl http://127.0.0.1:18789/healthz
 私聊发一次「你是谁」（不要连发），同时看：
 
 ```bash
-docker logs -f --timestamps aidy-gateway
+docker logs -f --timestamps xa-gateway
 ```
 
 | 检查项 | 通过 | 未通过 |
@@ -479,15 +479,15 @@ restart-loop breaker tripped: N unclean boot(s)
 
 ### 6.4 agent 目录下的 models.json 冲突
 
-路径：`~/aidy/config/agents/itservicedeskagent/agent/models.json`
+路径：`~/xa/config/agents/itservicedeskagent/agent/models.json`
 
 若曾通过 Control UI / CLI 写入过 Provider，可能生成**含明文 Key** 的 `models.json`，与 Docker secrets 主配置冲突。
 
 **处理：**
 
 ```bash
-rm ~/aidy/config/agents/itservicedeskagent/agent/models.json
-cd ~/aidy && docker compose restart
+rm ~/xa/config/agents/itservicedeskagent/agent/models.json
+cd ~/xa && docker compose restart
 ```
 
 之后仅依赖 `openclaw.json` + secrets 注入。
@@ -504,8 +504,8 @@ Gateway 已显示正确 `agent model: domestic/qwen3.8-max`，但调用仍失败
 2. 先用 `qwen-plus` 做连通性测试：
 
 ```bash
-printf '%s' 'qwen-plus' > ~/aidy/secrets/model_id.txt
-printf '%s' 'domestic/qwen-plus' > ~/aidy/secrets/model_ref.txt
+printf '%s' 'qwen-plus' > ~/xa/secrets/model_id.txt
+printf '%s' 'domestic/qwen-plus' > ~/xa/secrets/model_ref.txt
 docker compose down && docker compose up -d
 ```
 
@@ -541,7 +541,7 @@ Reply message sent via WebSocket
 **处理：**
 
 1. 在对应 `models[]` 条目加上 `"compat": { "thinkingFormat": "qwen", "supportsDeveloperRole": false }`，`config validate` 后 restart。
-2. 补一个空的或极短的 `~/aidy/workspace/MEMORY.md`，避免 Agent 读文件失败后再跑第二轮。
+2. 补一个空的或极短的 `~/xa/workspace/MEMORY.md`，避免 Agent 读文件失败后再跑第二轮。
 3. 按 **4.2** 重启后再发「你是谁」：`model-fetch` 的 200 到 `kind=final` 应降到大约 2～5 秒，而不是十几秒。
 4. 模型变快之后，若仍觉得「发出去没反应」，按 `WeCom 通道插件接入手册.md` **7.4** 打开企微「思考中」占位（须插件 ≥ 2026.7.2）。占位**不会**缩短模型耗时，只是让客户端立刻出现动画。
 
@@ -556,7 +556,7 @@ Reply message sent via WebSocket
 # 这段时间内没有 [model-fetch]
 ```
 
-**原因：** reply 流水线在调用 Agent 之前对 inbound 图做了媒体理解。`tools.media.image.enabled` 未设 `false`，或 catalog `input` 含 `image`（自定义 Provider 会被自动登记为图片理解后端）。Aidy 规则禁止按图意猜故障，这段产出没有下游消费者。
+**原因：** reply 流水线在调用 Agent 之前对 inbound 图做了媒体理解。`tools.media.image.enabled` 未设 `false`，或 catalog `input` 含 `image`（自定义 Provider 会被自动登记为图片理解后端）。xA 规则禁止按图意猜故障，这段产出没有下游消费者。
 
 **处理：** 按 **4.2** 把 `tools.media` 三项都关掉、`input` 收成 `["text"]`、不要设 `imageModel`，然后 restart。再发一张图：`apply_media_understanding` 应消失或只剩几十毫秒。
 
@@ -570,16 +570,16 @@ Reply message sent via WebSocket
 
 ```bash
 # 1. 改 secret（示例换成 qwen-plus）
-printf '%s' 'qwen-plus' > ~/aidy/secrets/model_id.txt
-printf '%s' 'domestic/qwen-plus' > ~/aidy/secrets/model_ref.txt
+printf '%s' 'qwen-plus' > ~/xa/secrets/model_id.txt
+printf '%s' 'domestic/qwen-plus' > ~/xa/secrets/model_ref.txt
 
-# 2. 重启（不必改 openclaw.json，id 仍走 ${AIDY_DOMESTIC_MODEL_ID}）
-cd ~/aidy
+# 2. 重启（不必改 openclaw.json，id 仍走 ${XA_DOMESTIC_MODEL_ID}）
+cd ~/xa
 docker compose down
 docker compose up -d
 
 # 3. 验证
-docker compose logs aidy-gateway | grep "agent model"
+docker compose logs xa-gateway | grep "agent model"
 ```
 
 换 Base URL 或轮换 API Key：只改对应 secret 文件 + `compose down/up`，**不要**改 json 明文。
@@ -589,10 +589,10 @@ docker compose logs aidy-gateway | grep "agent model"
 ## 8. 配置关系速查图
 
 ```text
-~/aidy/secrets/model_*.txt
+~/xa/secrets/model_*.txt
         │
         ▼  entrypoint.sh export
-环境变量 AIDY_DOMESTIC_*
+环境变量 XA_DOMESTIC_*
         │
         ▼  openclaw.json ${VAR}
 models.providers.domestic  +  agents.entries.*.model
@@ -632,12 +632,12 @@ https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 | 1 | secret 文件 | `model_api_key`、`model_base_url`、`model_id`、`model_ref` 已创建，`chmod 600` |
 | 2 | `model_ref` | = `<providers 键名>/` + `model_id`（`domestic/...` 或 `bailian/...`，与启动日志一致） |
 | 3 | `openclaw.json` | 对应 Provider 的 `models[]` 含 `name`、`reasoning: false`、`compat.thinkingFormat: "qwen"` |
-| 4 | Agent `model` | `"${AIDY_DOMESTIC_MODEL_REF}"`；建议 `thinkingDefault: "off"` |
-| 5 | entrypoint | 已 export 四个 `AIDY_DOMESTIC_*` 变量 |
+| 4 | Agent `model` | `"${XA_DOMESTIC_MODEL_REF}"`；建议 `thinkingDefault: "off"` |
+| 5 | entrypoint | 已 export 四个 `XA_DOMESTIC_*` 变量 |
 | 6 | compose | 已挂载模型相关 secrets |
 | 7 | 启动日志 | `agent model: <providers>/<模型id> (thinking=off, ...)`，无 `Unknown model` |
 | 8 | 无冲突 | 已删除 agent 下多余的 `models.json`（若存在明文 Key） |
-| 9 | `MEMORY.md` | `~/aidy/workspace/MEMORY.md` 存在；群聊日志无该路径 `ENOENT` |
+| 9 | `MEMORY.md` | `~/xa/workspace/MEMORY.md` 存在；群聊日志无该路径 `ENOENT` |
 | 10 | 首包到终包 | 私聊「你是谁」：`model-fetch` 200 → `kind=final` 约 2～5 秒，而不是 8～20 秒 |
 | 11 | 模型超时 | `[model-fetch] start` 含 `timeoutMs=20000`，不再是 `undefined` |
 | 12 | 发图不走理解 | 发一张图后无数秒级 `apply_media_understanding`；`input` 仅为 `["text"]` |

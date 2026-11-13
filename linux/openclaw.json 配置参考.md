@@ -2,7 +2,7 @@
 
 > 本文档由仓库根目录原文档**重组**而来：只调整章节归属与交叉引用，**不改变**部署步骤、命令、YAML、错误码或禁止事项。阅读顺序见 [README.md](README.md)。
 
-适用对象：在 Aidy / WSL2 Docker 或 Linux 服务器环境维护 OpenClaw Gateway 的工程师。
+适用对象：在 xA / WSL2 Docker 或 Linux 服务器环境维护 OpenClaw Gateway 的工程师。
 
 本文档说明 `openclaw.json` 各顶层块及常用字段的含义与作用，并结合本仓库 `openclaw/openclaw.json` 举例。**完整、实时的字段列表以 OpenClaw 官方文档与本地 schema 为准。**
 
@@ -12,7 +12,7 @@
 
 | 项 | 说明 |
 | --- | --- |
-| 默认路径 | `~/.openclaw/openclaw.json`（Docker 挂载时常为 `~/aidy/config/openclaw.json` → 容器内 `/home/node/.openclaw/openclaw.json`） |
+| 默认路径 | `~/.openclaw/openclaw.json`（Docker 挂载时常为 `~/xa/config/openclaw.json` → 容器内 `/home/node/.openclaw/openclaw.json`） |
 | 格式 | **JSON5**（允许注释、尾逗号）；校验时按 JSON Schema 严格验证 |
 | 环境变量覆盖 | `OPENCLAW_CONFIG_PATH` 指向配置文件；`OPENCLAW_STATE_DIR` 指向状态目录 |
 | 占位符 | 字符串中 `${VAR_NAME}` 引用环境变量（仅大写 `[A-Z_][A-Z0-9_]*`） |
@@ -35,7 +35,7 @@ openclaw config get <path>      # 读取单个路径
 openclaw doctor --fix           # 修复常见配置问题
 ```
 
-> **版本说明：** OpenClaw 2026.9.2 以 `agents.defaults` + `agents.entries` 描述多 Agent。Aidy 现网已迁到 **`agents.entries`**（键名即 Agent id）。旧模板若仍是 `agents.list[]`，升级镜像后用 `openclaw doctor --fix` 迁移，再 `config validate`。不要把 `list` 与 `entries` 混写。
+> **版本说明：** OpenClaw 2026.9.2 以 `agents.defaults` + `agents.entries` 描述多 Agent。xA 现网已迁到 **`agents.entries`**（键名即 Agent id）。旧模板若仍是 `agents.list[]`，升级镜像后用 `openclaw doctor --fix` 迁移，再 `config validate`。不要把 `list` 与 `entries` 混写。
 
 ---
 
@@ -101,8 +101,8 @@ OpenClaw 在保存配置时自动写入的运行时标记。
 | `jsonOnly` | 要求解析器只输出 JSON |
 | `passEnv` | 传给 exec 子进程的环境变量白名单 |
 
-**Aidy Windows 示例：** `enterprise-secrets` → `Resolve-OpenClawSecrets.ps1`  
-**Aidy Docker：** 通常 **删除** 整个 `secrets.providers` 段，改用 entrypoint 注入 `${OPENCLAW_GATEWAY_TOKEN}` 等环境变量。
+**xA Windows 示例：** `enterprise-secrets` → `Resolve-OpenClawSecrets.ps1`  
+**xA Docker：** 通常 **删除** 整个 `secrets.providers` 段，改用 entrypoint 注入 `${OPENCLAW_GATEWAY_TOKEN}` 等环境变量。
 
 ### 3.2 SecretRef 对象形态
 
@@ -112,7 +112,7 @@ OpenClaw 在保存配置时自动写入的运行时标记。
 {
   "source": "exec",
   "provider": "enterprise-secrets",
-  "id": "gateway/aidy-it-service/auth/token"
+  "id": "gateway/xa-it-service/auth/token"
 }
 ```
 
@@ -131,7 +131,7 @@ OpenClaw 在保存配置时自动写入的运行时标记。
 
 定义 Agent 身份、工作区、模型、工具策略等。
 
-### 4.1 Aidy 现网 `agents.entries`（2026.9.2）
+### 4.1 xA 现网 `agents.entries`（2026.9.2）
 
 Agent id 是 **对象键名**，不再写 `id` 字段：
 
@@ -143,7 +143,7 @@ Agent id 是 **对象键名**，不再写 `id` 字段：
       "name": "ITServiceDeskAgent",
       "workspace": "/home/node/.openclaw/workspace",
       "agentDir": "/home/node/.openclaw/agents/itservicedeskagent/agent",
-      "model": "${AIDY_DOMESTIC_MODEL_REF}",
+      "model": "${XA_DOMESTIC_MODEL_REF}",
       "thinkingDefault": "off"
     }
   }
@@ -157,7 +157,7 @@ Agent id 是 **对象键名**，不再写 `id` 字段：
 | `workspace` | string | 工作区根目录（规则文件 AGENTS.md、幂等状态等） |
 | `agentDir` | string | Agent 私有目录（auth-profiles、agent 级配置） |
 | `model` | string | 主模型 ref，格式 `provider/model-name` |
-| `thinkingDefault` | string | 会话思考级别；Aidy 用 `"off"` |
+| `thinkingDefault` | string | 会话思考级别；xA 用 `"off"` |
 | `identity.name` | string | 对外展示名（如「小A」） |
 | `identity.theme` | string | 角色主题描述，进入 system prompt |
 | `identity.emoji` | string | 头像/反应默认 emoji |
@@ -203,10 +203,10 @@ agentDir   → /home/node/.openclaw/agents/itservicedeskagent/agent
 | `thinkingDefault` | 思考级别 default |
 | `heartbeat` | 定时心跳 Agent 运行 |
 | `sandbox` | 工具沙箱：`mode` off/non-main/all；`scope` session/agent/shared |
-| `skills` | Agent 可见 Skill **白名单**。省略 = 不限制；`[]` = 一个都不进 system prompt。Aidy 必须 `[]` |
+| `skills` | Agent 可见 Skill **白名单**。省略 = 不限制；`[]` = 一个都不进 system prompt。xA 必须 `[]` |
 | `skipBootstrap` | 跳过自动生成 AGENTS.md 等 |
 | `bootstrapMaxChars` | 单份 bootstrap 文件注入上限（默认 20000）。现网 `AGENTS.md` 已超限，**defaults 与 `itservicedeskagent` 都要写 `40000`**；只写 defaults，2026.9.2 的 `/context detail` 仍可能显示 20,000 |
-| `bootstrapTotalMaxChars` | 全部 bootstrap 合计上限（默认 60000）。Aidy 合计未超，一般不用改 |
+| `bootstrapTotalMaxChars` | 全部 bootstrap 合计上限（默认 60000）。xA 合计未超，一般不用改 |
 | `utilityModel` | 内部短任务用的小模型 |
 
 ---
@@ -226,7 +226,7 @@ agentDir   → /home/node/.openclaw/agents/itservicedeskagent/agent
 | `elevated.enabled` | 是否允许提权 exec 逃逸沙箱 |
 | `elevated.allowFrom` | 按通道限制谁可提权 |
 | `fs.workspaceOnly` | 文件工具仅限 workspace 内 |
-| `media.image/audio/video.enabled` | 是否做 inbound 媒体理解 / 把媒体送给模型。Aidy **三项都必须 `false`**，否则发图会多一段 `reply.apply_media_understanding`（现网 7.2s）。这与 `alsoAllow` 不是同一层；`enabled: false` 才关掉 reply 流水线里的自动理解 |
+| `media.image/audio/video.enabled` | 是否做 inbound 媒体理解 / 把媒体送给模型。xA **三项都必须 `false`**，否则发图会多一段 `reply.apply_media_understanding`（现网 7.2s）。这与 `alsoAllow` 不是同一层；`enabled: false` 才关掉 reply 流水线里的自动理解 |
 | `sessions.visibility` | 会话树可见性，如 `tree` |
 | `agentToAgent.enabled` | Agent 间调用 |
 | `agentToAgent.allow` | 允许的 Agent id 列表 |
@@ -243,7 +243,7 @@ agentDir   → /home/node/.openclaw/agents/itservicedeskagent/agent
 | `messaging` | 消息与会话相关工具 |
 | `full` | 不限制内置工具 |
 
-Aidy 使用 **`minimal` + alsoAllow**，只打开 `oa_workflow`。**不要**把 `read` 加入 `alsoAllow`：2026.9.2 现网在 Agent 级 `deny` 含 `group:fs`，热路径禁止读附件与规则文件；inbound 由插件自动暂存。不要把 `write` / `edit` / `memory_search` / `memory_get` / `message` / `wecom_mcp` 加入 `alsoAllow`。插件 `bridge-config.json` 须 `active=true` 才会真正建单。工单幂等由 Redis ledger 负责，不要让模型写本机台账。
+xA 使用 **`minimal` + alsoAllow**，只打开 `oa_workflow`。**不要**把 `read` 加入 `alsoAllow`：2026.9.2 现网在 Agent 级 `deny` 含 `group:fs`，热路径禁止读附件与规则文件；inbound 由插件自动暂存。不要把 `write` / `edit` / `memory_search` / `memory_get` / `message` / `wecom_mcp` 加入 `alsoAllow`。插件 `bridge-config.json` 须 `active=true` 才会真正建单。工单幂等由 Redis ledger 负责，不要让模型写本机台账。
 
 全局必须关 `tools.media.image/audio/video.enabled`（三项都 `false`），并保持 catalog `input: ["text"]`。不要设 `agents.defaults.imageModel`：设了会给图片理解另一条自动探测路径。附件仍由企微通道落盘、`oa_workflow` 暂存。
 
@@ -267,7 +267,7 @@ Aidy 使用 **`minimal` + alsoAllow**，只打开 `oa_workflow`。**不要**把 
 | Agent | `agents.entries.*.tools.*` | 单个 Agent 覆盖/细化 |
 
 合并规则：**Agent 级覆盖全局**；`deny` 始终优先。  
-Aidy 两处配置相同，表示该 Agent 与全局策略一致。
+xA 两处配置相同，表示该 Agent 与全局策略一致。
 
 ### 5.5 插件 vs 工具（两层开关）
 
@@ -302,7 +302,7 @@ plugins.allow / load.paths / entries.enabled
 
 OA 桥接「最后也当工具用」：对模型暴露的入口就是 `oa_workflow`。它仍然先是插件——不进 `plugins.allow` / `load.paths`，Gateway 不会 `registerTool`，后面白名单写了也没用。HTTP、Redis、身份映射都在插件进程里跑，模型不能直调 Ecology。
 
-企微插件是「一个包、多种能力」。去掉 `alsoAllow` 里的 `wecom_mcp` **不会**关掉企业微信，也 **不会**自动去掉 `wecomcli-smartsheet` 等 Skill 目录。Aidy 热路径**不要**把 `message` / `write` / `edit` / `memory_*` / `read` 放进 `alsoAllow`；同时必须 `agents.defaults.skills: []`，否则 `/context detail` 仍会列出约 30 个 skill（现网曾占约 1 万字符）。工单正文由模型直接输出，通道负责发出；幂等看 Redis，不写本机台账。inbound 附件由插件自动暂存，不要用 `read` 看图或文档。
+企微插件是「一个包、多种能力」。去掉 `alsoAllow` 里的 `wecom_mcp` **不会**关掉企业微信，也 **不会**自动去掉 `wecomcli-smartsheet` 等 Skill 目录。xA 热路径**不要**把 `message` / `write` / `edit` / `memory_*` / `read` 放进 `alsoAllow`；同时必须 `agents.defaults.skills: []`，否则 `/context detail` 仍会列出约 30 个 skill（现网曾占约 1 万字符）。工单正文由模型直接输出，通道负责发出；幂等看 Redis，不写本机台账。inbound 附件由插件自动暂存，不要用 `read` 看图或文档。
 
 ```text
 员工发消息
@@ -310,11 +310,11 @@ OA 桥接「最后也当工具用」：对模型暴露的入口就是 `oa_workfl
   → Gateway 把可信 ctx 交给 Agent
   → Agent 只能调 alsoAllow 里的名字
         ├─ oa_workflow     ← 要（建单）
-        └─ wecom_mcp / read / write / edit / memory_* / message ← Aidy 不要
+        └─ wecom_mcp / read / write / edit / memory_* / message ← xA 不要
   → 回复仍由通道 wecom 发出去            ← 还是插件，不是 wecom_mcp
 ```
 
-Aidy 现网：两处 `alsoAllow`（全局 + `itservicedeskagent`）均只含 `oa_workflow`，**不含** `read` / `wecom_mcp` / `write` / `edit` / `memory_search` / `memory_get` / `message`，也不要把插件 id `wecom-openclaw-plugin` 写进 `alsoAllow`。两处必须一致。Agent 级 `deny` 含 `group:fs`（关掉 `read`/`write`/`edit`）。`tools.media.*.enabled` 为 `false`。`agents.defaults.skipBootstrap` 为 `true`。`agents.defaults.skills` 为 `[]`（Skill 一个都不进 prompt）。身份适配器开关在桥接 `bridge-config.json` 的 `identity.adapter`，见 `OA_tool/身份适配器说明.md` 第 10 节。日志若再出现 `smartsheet_get_records`，见 `WeCom 通道插件接入手册.md` 9.2。
+xA 现网：两处 `alsoAllow`（全局 + `itservicedeskagent`）均只含 `oa_workflow`，**不含** `read` / `wecom_mcp` / `write` / `edit` / `memory_search` / `memory_get` / `message`，也不要把插件 id `wecom-openclaw-plugin` 写进 `alsoAllow`。两处必须一致。Agent 级 `deny` 含 `group:fs`（关掉 `read`/`write`/`edit`）。`tools.media.*.enabled` 为 `false`。`agents.defaults.skipBootstrap` 为 `true`。`agents.defaults.skills` 为 `[]`（Skill 一个都不进 prompt）。身份适配器开关在桥接 `bridge-config.json` 的 `identity.adapter`，见 `OA_tool/身份适配器说明.md` 第 10 节。日志若再出现 `smartsheet_get_records`，见 `WeCom 通道插件接入手册.md` 9.2。
 
 ---
 
@@ -348,7 +348,7 @@ Aidy 现网：两处 `alsoAllow`（全局 + `itservicedeskagent`）均只含 `oa
 
 | type | 作用 | 典型场景 |
 | --- | --- | --- |
-| `route` | 按 `match` 条件将消息交给指定 Agent | 企微 → IT 服务台 Agent（Aidy 默认） |
+| `route` | 按 `match` 条件将消息交给指定 Agent | 企微 → IT 服务台 Agent（xA 默认） |
 | `acp` | 持久 ACP（Agent Conversation Protocol）会话绑定 | 需要长期固定会话上下文的集成场景 |
 
 ### 6.3 匹配与优先级
@@ -395,15 +395,15 @@ Aidy 现网：两处 `alsoAllow`（全局 + `itservicedeskagent`）均只含 `oa
 | `allowFrom` | 允许的发送者列表；`open` 时需含 `"*"` |
 | `groupPolicy` | 群聊策略：`allowlist` \| `open` \| `disabled` |
 | `groupAllowFrom` | 群聊允许列表 |
-| `sendThinkingMessage` | 是否发送「思考中」占位消息。Aidy 现网 `true`（OpenClaw 2026.9.2 + 企微插件须 ≥ 2026.7.2）。与百炼 `enable_thinking` 不是同一件事 |
+| `sendThinkingMessage` | 是否发送「思考中」占位消息。xA 现网 `true`（OpenClaw 2026.9.2 + 企微插件须 ≥ 2026.7.2）。与百炼 `enable_thinking` 不是同一件事 |
 | `healthMonitor.enabled` | 该通道健康监控与自动重启 |
 
-### 7.2 Aidy 企微 `channels.wecom`
+### 7.2 xA 企微 `channels.wecom`
 
 | 字段 | 作用 |
 | --- | --- |
-| `botId` | 企微机器人 ID；Aidy 用 `${AIDY_IT_WECOM_BOT_ID}` |
-| `secret` | 机器人 Secret；Aidy 用 `${AIDY_IT_WECOM_BOT_SECRET}` |
+| `botId` | 企微机器人 ID；xA 用 `${XA_IT_WECOM_BOT_ID}` |
+| `secret` | 机器人 Secret；xA 用 `${XA_IT_WECOM_BOT_SECRET}` |
 | `dmPolicy` / `groupPolicy` | 当前测试常用 `open`；生产应收紧 `allowFrom` |
 | `sendThinkingMessage` | 现网 `true`。插件须 **≥ 2026.7.2**。升级见 `WeCom 通道插件接入手册.md` **第 16 节**；行为见该手册 **7.4**。与百炼 `enable_thinking` 不是同一件事 |
 
@@ -424,13 +424,13 @@ Gateway HTTP/WebSocket 服务与鉴权。同一端口复用：WebSocket 控制/R
 | **`gateway.bind`** | `gateway.bind` | Gateway **监听哪个网络接口**（谁能连上端口） |
 | **`bindings`** | 顶层 `bindings[]` | 入站消息 **交给哪个 Agent**（见第 6 节） |
 
-二者独立配置，Aidy Docker 典型组合：`bind: "lan"` + `bindings` 把 `wecom/default` 路由到 `itservicedeskagent`。
+二者独立配置，xA Docker 典型组合：`bind: "lan"` + `bindings` 把 `wecom/default` 路由到 `itservicedeskagent`。
 
 ### 8.1 常用字段
 
 | 字段 | 作用 |
 | --- | --- |
-| `mode` | **`local`**：本机运行 Gateway；`remote`：CLI 连远程 Gateway。Aidy 必须为 `local` |
+| `mode` | **`local`**：本机运行 Gateway；`remote`：CLI 连远程 Gateway。xA 必须为 `local` |
 | `port` | 监听端口，默认 `18789`；Docker 映射 `"18789:18789"` |
 | `bind` | 网络绑定模式，见 8.2 |
 | `customBindHost` | `bind: "custom"` 时指定 IPv4 地址（如 `"0.0.0.0"` 或某网卡 IP） |
@@ -451,14 +451,14 @@ Gateway HTTP/WebSocket 服务与鉴权。同一端口复用：WebSocket 控制/R
 | 模式 | 实际监听 | 谁能连接 | 典型场景 |
 | --- | --- | --- | --- |
 | **`loopback`**（默认） | `127.0.0.1` | 仅本机进程 | 原生 Windows/Linux 开发；远程用 SSH 隧道或 Tailscale Serve |
-| **`lan`** | `0.0.0.0`（所有 IPv4 网卡） | 局域网内其他设备 | **WSL2 + Docker `-p 18789:18789`**（Aidy 标准做法） |
+| **`lan`** | `0.0.0.0`（所有 IPv4 网卡） | 局域网内其他设备 | **WSL2 + Docker `-p 18789:18789`**（xA 标准做法） |
 | **`tailnet`** | Tailscale 网卡 IPv4；无 Tailscale 时回退 `loopback` | 同一 Tailscale 网络内设备 | 远程笔记本/手机经 tailnet 访问，不暴露整个 LAN |
 | **`auto`** | 容器内 → 等同 `lan`（`0.0.0.0`）；非容器 → 等同 `loopback` | 随环境自动 | 官方 Docker 镜像默认倾向；Tailscale serve/funnel 激活时强制 `loopback` |
 | **`custom`** | `gateway.customBindHost` 指定的单个 IPv4 | 该接口可达的客户端 | 只监听某块网卡，比 `lan` 更精细 |
 
 **`tailnet` / `custom` 额外行为：** 当解析地址不是 `127.0.0.1` 或 `0.0.0.0` 时，Gateway 会**同时**在 `127.0.0.1:同端口` 再开一个 listener，供本机客户端使用；任一 listener 绑定失败则**启动失败**。
 
-**Aidy Docker 推荐：** 显式 `"bind": "lan"`，并与 `entrypoint.sh` 中 `--bind lan`、`docker-compose.yml` 中 `OPENCLAW_GATEWAY_BIND: lan` 保持一致。
+**xA Docker 推荐：** 显式 `"bind": "lan"`，并与 `entrypoint.sh` 中 `--bind lan`、`docker-compose.yml` 中 `OPENCLAW_GATEWAY_BIND: lan` 保持一致。
 
 ```json
 "gateway": {
@@ -529,7 +529,7 @@ Gateway HTTP/WebSocket 服务与鉴权。同一端口复用：WebSocket 控制/R
 | `entries.<pluginId>.hooks.*` | 钩子安全：如 `allowPromptInjection` |
 | `slots.memory` | 独占类插件 slot 选择 |
 
-**Aidy 示例：**
+**xA 示例：**
 
 ```json
 "plugins": {
@@ -561,14 +561,14 @@ npm/catalog 安装的企微插件 **不必** 出现在 `load.paths`。
 
 ## 10. `models`（模型 Provider）
 
-定义 LLM 供应商、API 地址、模型 catalog。Aidy Docker 路径把 Key / baseUrl / 模型 id 放在 `${VAR}` 里，catalog 元数据（`name`、`reasoning`、`compat`）写在 json 固定值。
+定义 LLM 供应商、API 地址、模型 catalog。xA Docker 路径把 Key / baseUrl / 模型 id 放在 `${VAR}` 里，catalog 元数据（`name`、`reasoning`、`compat`）写在 json 固定值。
 
 | 字段 | 作用 |
 | --- | --- |
 | `models.mode` | catalog 行为：`merge` \| `replace` |
 | `models.providers.<id>` | 自定义 Provider 标识（如 `domestic`、`bailian`）。须与 Agent `model` 前缀、`model_ref.txt` 一致 |
-| `baseUrl` / `apiKey` / `api` | 供应商地址、密钥、协议；Docker 下用 `${AIDY_DOMESTIC_*}` |
-| `timeoutSeconds` | 该 Provider 一次模型 HTTP 的总超时（含连接、响应头、流式正文）。Aidy 用 **`20`**：正常首包 0.8～3s、出参最多约 8s；现网曾出现 `timeoutMs=undefined` 导致首包空等 27s。不要设成 120（那是云端默认空闲看门狗，封不住这次长尾） |
+| `baseUrl` / `apiKey` / `api` | 供应商地址、密钥、协议；Docker 下用 `${XA_DOMESTIC_*}` |
+| `timeoutSeconds` | 该 Provider 一次模型 HTTP 的总超时（含连接、响应头、流式正文）。xA 用 **`20`**：正常首包 0.8～3s、出参最多约 8s；现网曾出现 `timeoutMs=undefined` 导致首包空等 27s。不要设成 120（那是云端默认空闲看门狗，封不住这次长尾） |
 | `models[]` | 该 Provider 下的模型 catalog |
 
 ### 10.1 `models.providers.<id>.models[]` 条目
@@ -580,16 +580,16 @@ npm/catalog 安装的企微插件 **不必** 出现在 `load.paths`。
 | `reasoning` | OpenClaw 是否按 reasoning 模型组请求（`developer` 角色）。百炼兼容端须 **`false`**，否则易 HTTP 400 |
 | `compat.thinkingFormat` | 自定义 Provider 如何把会话 `thinking=off` 映射到上游。百炼 compatible-mode 用 **`"qwen"`**，才会发顶层 `enable_thinking: false` |
 | `compat.supportsDeveloperRole` | 百炼不支持 `developer` 角色，设 **`false`** |
-| `input` | 模态。Aidy **必须** `["text"]`。写成 `["text","image"]` 时，OpenClaw 会把该自定义 Provider 自动登记为图片理解后端，inbound 图会走 `apply_media_understanding`（现网实测约 7s，且不一定出现 `[model-fetch]`）。附件只走 `oa_workflow` `attach` |
+| `input` | 模态。xA **必须** `["text"]`。写成 `["text","image"]` 时，OpenClaw 会把该自定义 Provider 自动登记为图片理解后端，inbound 图会走 `apply_media_understanding`（现网实测约 7s，且不一定出现 `[model-fetch]`）。附件只走 `oa_workflow` `attach` |
 | `contextWindow` / `maxTokens` | 上下文与输出上限（非第三方密钥，可写死） |
 
 **`reasoning: false` 不能代替 `compat.thinkingFormat`。** `qwen3.8-max` / `qwen3.8-flash` 在百炼侧默认思考为 `xhigh`；自定义 `bailian`/`domestic` 若不声明 `"qwen"` 格式，Gateway 日志虽是 `thinking=off`，请求里仍没有 `enable_thinking: false`，企微会等 8～20 秒才收到 `kind=final`。详见 `DashScope 兼容 Provider 配置手册.md` §2.4。
 
-Aidy 百炼条目最小完整形：
+xA 百炼条目最小完整形：
 
 ```json
 {
-  "id": "${AIDY_DOMESTIC_MODEL_ID}",
+  "id": "${XA_DOMESTIC_MODEL_ID}",
   "name": "qwen3.8 flash",
   "reasoning": false,
   "compat": {
@@ -607,9 +607,9 @@ Aidy 百炼条目最小完整形：
 
 | 字段 | 作用 |
 | --- | --- |
-| `model` | 字符串：`provider/model`，如 `bailian/qwen3.8-flash` 或 `${AIDY_DOMESTIC_MODEL_REF}`（前缀必须等于 `providers` 键名） |
+| `model` | 字符串：`provider/model`，如 `bailian/qwen3.8-flash` 或 `${XA_DOMESTIC_MODEL_REF}`（前缀必须等于 `providers` 键名） |
 | `model.primary` / `fallbacks` | 对象形式主模型与回退 |
-| `thinkingDefault` | 会话思考级别；Aidy 用 `"off"`。须与 `compat.thinkingFormat` 一起才能真正关掉百炼思考链 |
+| `thinkingDefault` | 会话思考级别；xA 用 `"off"`。须与 `compat.thinkingFormat` 一起才能真正关掉百炼思考链 |
 
 国内模型适配见 `DashScope 兼容 Provider 配置手册.md` 与 [Custom providers](https://docs.openclaw.ai/gateway/config-tools#custom-providers-and-base-urls)。
 
@@ -621,9 +621,9 @@ Aidy 百炼条目最小完整形：
 
 | 字段 | 作用 |
 | --- | --- |
-| `dmScope` | DM 会话隔离：`main` \| `per-peer` \| `per-channel-peer` 等。Aidy 用 `per-channel-peer` |
+| `dmScope` | DM 会话隔离：`main` \| `per-peer` \| `per-channel-peer` 等。xA 用 `per-channel-peer` |
 | `reset.mode` | 会话重置策略（daily / idle） |
-| `resetByType.group` | 按会话类型覆盖重置。Aidy 群聊：`mode: idle`、`idleMinutes: 30` |
+| `resetByType.group` | 按会话类型覆盖重置。xA 群聊：`mode: idle`、`idleMinutes: 30` |
 | `threadBindings` | 线程绑定会话路由 |
 
 见 [Session Management](https://docs.openclaw.ai/concepts/session)。
@@ -638,13 +638,13 @@ Aidy 百炼条目最小完整形：
 
 ### 11.3 `skills`
 
-Skill 是 markdown 说明书，注入到 system prompt 的 `<available_skills>`，**不是** `alsoAllow` 里的工具。模型看到目录后，理论上还要用 `read` 去打开 `SKILL.md`；Aidy 已 `deny` `group:fs`，但目录本身仍占 token，且会把智能表格等用法写进提示词。
+Skill 是 markdown 说明书，注入到 system prompt 的 `<available_skills>`，**不是** `alsoAllow` 里的工具。模型看到目录后，理论上还要用 `read` 去打开 `SKILL.md`；xA 已 `deny` `group:fs`，但目录本身仍占 token，且会把智能表格等用法写进提示词。
 
 **两层不要混：**
 
-| 层 | 字段 | 作用 | Aidy |
+| 层 | 字段 | 作用 | xA |
 | --- | --- | --- | --- |
-| 逐条开关 | `skills.entries.<id>.enabled: false` | 只关掉**点了名**的那一条。没写名字的仍可用 | Aidy 现网 **不写** `skills.entries`；挡插件 skill 靠下面的 `[]` |
+| 逐条开关 | `skills.entries.<id>.enabled: false` | 只关掉**点了名**的那一条。没写名字的仍可用 | xA 现网 **不写** `skills.entries`；挡插件 skill 靠下面的 `[]` |
 | Agent 白名单 | `agents.defaults.skills` / `agents.entries.*.skills` | **省略 = 不限制**；非空列表 = 只放行这些名字；`[]` = **一个都不进 prompt** | **必须 `agents.defaults.skills: []`** |
 
 企微插件加载后还会提供 `wecomcli-disk`、`wecomcli-doc`、`wecomcli-smartsheet`、`wecom-send-template-card` 等。它们不在上面那份 bundled `entries` 名单里，所以只关 `entries` 时 `/context detail` 仍会列出约 30 个 skill（现网曾约 10,156 字符）。`skills.allowBundled` 只管 bundled，**挡不住**插件 skill。
@@ -659,7 +659,7 @@ Skill 是 markdown 说明书，注入到 system prompt 的 `<available_skills>`�
 }
 ```
 
-Aidy 两处都写 `skills: []`（`agents.defaults` **和** `agents.entries.itservicedeskagent`）。显式写在 entry 上的列表不与 defaults 合并；只写 defaults 时，已绑定的 `itservicedeskagent` 会话仍可能注入 `wecomcli-*`。改完 `config validate` 后 **restart Gateway**，再 **`/new`**，然后跑 `/context detail`。旧会话会缓存 `skillsSnapshot`。目标：`Skills list` 为 0、不再出现 `wecomcli-*`。
+xA 两处都写 `skills: []`（`agents.defaults` **和** `agents.entries.itservicedeskagent`）。显式写在 entry 上的列表不与 defaults 合并；只写 defaults 时，已绑定的 `itservicedeskagent` 会话仍可能注入 `wecomcli-*`。改完 `config validate` 后 **restart Gateway**，再 **`/new`**，然后跑 `/context detail`。旧会话会缓存 `skillsSnapshot`。目标：`Skills list` 为 0、不再出现 `wecomcli-*`。
 
 其它字段：
 
@@ -705,7 +705,7 @@ MCP 工具以 `bundle-mcp` 或具体工具名出现在工具策略中。
 
 ---
 
-## 13. 配置分层速查（Aidy）
+## 13. 配置分层速查（xA）
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -731,7 +731,7 @@ MCP 工具以 `bundle-mcp` 或具体工具名出现在工具策略中。
 
 ---
 
-## 14. Aidy 推荐配置检查清单
+## 14. xA 推荐配置检查清单
 
 | 检查项 | 期望 |
 | --- | --- |
@@ -752,9 +752,9 @@ MCP 工具以 `bundle-mcp` 或具体工具名出现在工具策略中。
 
 ---
 
-## 15. 现网配置（Aidy Docker，OA 主路径）
+## 15. 现网配置（xA Docker，OA 主路径）
 
-整份 JSON **以仓库 `openclaw/openclaw.json` 为准**（部署后是 `~/aidy/config/openclaw.json` → 容器 `/home/node/.openclaw/openclaw.json`）。本节只列核对项，不要在文档里再维护一份会漂的拷贝。字段含义见上文 §1–14。
+整份 JSON **以仓库 `openclaw/openclaw.json` 为准**（部署后是 `~/xa/config/openclaw.json` → 容器 `/home/node/.openclaw/openclaw.json`）。本节只列核对项，不要在文档里再维护一份会漂的拷贝。字段含义见上文 §1–14。
 
 OpenClaw **2026.9.2** 现网核对：
 

@@ -41,4 +41,4 @@
 - 本会话已有该条的 `confirmationId` 时调用 `status`，不要再 `prepare`。
 - **同一人全局只允许一张待确认单**（跨 `/new` 仍拦住）。再 `prepare` 或跨会话 `attach` 是 `ALREADY_PENDING`：请先确认或取消，不要让员工回到上一会话。
 - 同一内部幂等号 **仅当 pending 仍未过期**才 `ALREADY_PENDING`；pending 已过期或 `cancel` 得 `NOT_FOUND` 后允许重新 `prepare`。已提交会 `ALREADY_SUBMITTED`。
-- 员工可见状态以 `oa_workflow` 回执为准，格式见已注入的 `AGENTS.md`「用户可见回复」（与 `Aidy企微回复模板.md` 同步；不要再 `read` `TICKET_STATUS_BANNER.md`）。确认轮不写工单类型 / 所属系统；问题、地点、附件抄回执。
+- 员工可见状态以 `oa_workflow` 回执为准，格式见已注入的 `AGENTS.md`「用户可见回复」（与 `xA企微回复模板.md` 同步；不要再 `read` `TICKET_STATUS_BANNER.md`）。确认轮不写工单类型 / 所属系统；问题、地点、附件抄回执。

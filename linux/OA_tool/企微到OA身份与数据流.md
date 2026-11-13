@@ -1,6 +1,6 @@
 # 企微到 OA：身份、数据流与映射方案
 
-适用对象：已经拿到 OA 应用凭据、准备把 Aidy 工单接到 Ecology 流程 602 的工程师。
+适用对象：已经拿到 OA 应用凭据、准备把 xA 工单接到 Ecology 流程 602 的工程师。
 
 部署命令、Compose、entrypoint、错误码仍以 [OA Workflow Bridge（Redis）接入手册.md](OA%20Workflow%20Bridge（Redis）接入手册.md) 为准，本文不重复操作步骤。Ecology HTTP 细节见 [Ecology 流程创建 API 说明.md](Ecology%20流程创建%20API%20说明.md)。企微安装仍以 [../WeCom 通道插件接入手册.md](../WeCom%20通道插件接入手册.md) 为准。
 
@@ -38,7 +38,7 @@ Gateway 现网实测（2026-09-01，智能机器人 WebSocket）：
 核对命令（不要把完整 `userid` / `response_url` 贴进群或 git）：
 
 ```bash
-docker logs aidy-gateway --since 10m 2>&1 | grep -E 'aibot_msg_callback|"userid"'
+docker logs xa-gateway --since 10m 2>&1 | grep -E 'aibot_msg_callback|"userid"'
 ```
 
 看 `from.userid` 形态即可：`wo` 长串 = 加密；与企微管理后台「账号」相同才可能是明文。
@@ -52,8 +52,8 @@ docker logs aidy-gateway --since 10m 2>&1 | grep -E 'aibot_msg_callback|"userid"
 | 名称 | 形态 | 谁提供 | 写到哪 | 用在哪 |
 | --- | --- | --- | --- | --- |
 | **appid** | 字母数字和连字符，如 `2026-09-01-xxxx` | OA 开发：该应用的固定许可证号 | 部署目录 `bridge-config.json` 的 `appId` | 每个 Ecology 请求 Header `appid` |
-| **AppSecret** | UUID 形态密钥，16–512 字符 | OA 控制台；曾暴露的必须先轮换 | `~/aidy/secrets/oa_app_secret.txt` → `OA_APP_SECRET` | RSA 加密后换 token |
-| **接口账号人员 id** | **1–18 位纯数字** | 该应用所属 OA 账号的内部 `id`（已知工号可自查，见下） | `~/aidy/secrets/oa_api_user_id.txt` → `OA_API_USER_ID` | 只读预检 Header `userid`。**不是** `doCreateRequest` 的 Header。仍须注入 |
+| **AppSecret** | UUID 形态密钥，16–512 字符 | OA 控制台；曾暴露的必须先轮换 | `~/xa/secrets/oa_app_secret.txt` → `OA_APP_SECRET` | RSA 加密后换 token |
+| **接口账号人员 id** | **1–18 位纯数字** | 该应用所属 OA 账号的内部 `id`（已知工号可自查，见下） | `~/xa/secrets/oa_api_user_id.txt` → `OA_API_USER_ID` | 只读预检 Header `userid`。**不是** `doCreateRequest` 的 Header。仍须注入 |
 | **申请人人员 id** | **1–18 位纯数字** | 正在聊天的员工；适配器按工号点查后写入 Redis | `{prefix}:idmap:{mappingCode}` | `doCreateRequest` Header `userid`（RSA 加密）与表单 `xqsqr` |
 
 `2026-09-01-…` 这类字符串是 **appid**，不能写入 `oa_api_user_id.txt`。通道回传的 `wo…` 加密串也**不能**写入 Redis 或当作 `xqsqr`。插件对人员 id 的校验是 `^\d{1,18}$`，不符合则 `INVALID_CONFIGURATION` 或视为未映射。
@@ -84,7 +84,7 @@ Body: { "params": { "workcode": "工号" } }
 
 Secret **只**出现在换 token；后续接口不再带 Secret。不要理解成每一次请求都同时带 Secret 和加密 userid。
 
-若建单 Header 仍用接口账号人员 id，单据会落到接口账号头上，即使 `xqsqr` 填了张三。Aidy 因此把 `doCreateRequest` 的 Header `userid` 改成加密后的申请人人员 id；`xqsqr` 仍写同一申请人。只读预检 `getCreateWorkflowList` 仍用接口账号。
+若建单 Header 仍用接口账号人员 id，单据会落到接口账号头上，即使 `xqsqr` 填了张三。xA 因此把 `doCreateRequest` 的 Header `userid` 改成加密后的申请人人员 id；`xqsqr` 仍写同一申请人。只读预检 `getCreateWorkflowList` 仍用接口账号。
 
 管理员还需确认：该应用能否以员工身份创建流程 602（插件 `otherParams.isVerifyPer=1`）。未授权时建单会失败。
 
@@ -92,14 +92,14 @@ Secret **只**出现在换 token；后续接口不再带 Secret。不要理解�
 
 ## 4. 端到端流程
 
-全景（含运行时拓扑、预切流主路径、两阶段确认、Redis 键摘要）只在 [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) 写全。本节只保留接到 OA 的身份相关骨架。
+全景（含运行时拓扑、预切流主路径、两阶段确认、Redis 键摘要）只在 [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) 写全。本节只保留接到 OA 的身份相关骨架。
 
 ```text
 员工企微（文字 / 图片 / 文件）
   → wecom-openclaw-plugin
         body.from.userid → SenderId → ctx.requesterSenderId（现网：加密 userid）
   → OpenClaw Gateway
-  → Aidy Agent（理解、澄清、整理 draft；不直调 OA HTTP）
+  → xA Agent（理解、澄清、整理 draft；不直调 OA HTTP）
         └─ oa_workflow
               → prepare：哈希 SenderId → GET ledger → GET person-pending（已有待确认则拦在查身份之前）→ GET idmap（miss 则适配器转换并 SET EX）→ 写 pending（不调建单）
               → 原发送人确认 → submit_confirmed → getHrmSimpleInfo（部门/岗位/地点）→ applytoken（通常已缓存）→ doCreateRequest → 流程 602
@@ -113,7 +113,7 @@ Secret **只**出现在换 token；后续接口不再带 Secret。不要理解�
 
 ## 5. 各层输入与输出
 
-分层总表只在 [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) 第 4 节写全。本节展开 **身份相关** 字段：通道 body、inbound、可信上下文、以及接到 Ecology 时三种人分别出现在哪。
+分层总表只在 [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) 第 4 节写全。本节展开 **身份相关** 字段：通道 body、inbound、可信上下文、以及接到 Ecology 时三种人分别出现在哪。
 
 ### 5.1 企业微信推给插件的 body（现网日志）
 
@@ -216,7 +216,7 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 | `sqlx` | 申请类型 | 运维支持 `0` / 权限申请 `1` / IT需求 `2` |
 | `wtlx` / `szxt` / `szxtxq` | 所属系统 | `system-options.json` 系统名 → 选项 ID |
 | `xqlx1` / `yjygsh` | 需求类型 / 月节约工时 | 仅 IT 需求 |
-| `wtxqmskftp` | 问题详情 | 描述 + 影响范围 + 发生时间 + 已尝试措施 + 最终补充。inbound **图片**压缩后以 data URI 内嵌。**不**写 Aidy 工单号 |
+| `wtxqmskftp` | 问题详情 | 描述 + 影响范围 + 发生时间 + 已尝试措施 + 最终补充。inbound **图片**压缩后以 data URI 内嵌。**不**写 xA 工单号 |
 | `scfj` | 文档附件 | 只写文档。HTTP `fieldValue` 为数组的 JSON 字符串，见 [Ecology 流程创建 API 说明.md](Ecology%20流程创建%20API%20说明.md)。有文档才写。图片不进此字段。仓库样例 `attachmentFieldName=scfj`；空配置时带文档必须拒绝 |
 | `requestName` | 标题 | `[工单号] 摘要`，截断 120 字 |
 | `otherParams` | 流转 | `isnextflow` 取自 `bridge-config.json`（现网 `"0"`），`delReqFlowFaild=1`，`isVerifyPer=1`。`1`：建单后 OA 自动流转；`0`：正常建单、不自动流转（现网生产测试）。项目可用后改 json 为 `"1"` 并重启 Gateway |
@@ -228,7 +228,7 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 
 ## 6. 现行：发送人如何变成申请人
 
-运行时**不会**把 `wo…` 当工号，也**不会**在桥接 `oa-client.mjs` 里调 `getHrmUserInfoWithPage`。提交前部门 / 岗位 / 地点走另一条接口 `getHrmSimpleInfo`，见 5.7 与 [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) 第 7 节。
+运行时**不会**把 `wo…` 当工号，也**不会**在桥接 `oa-client.mjs` 里调 `getHrmUserInfoWithPage`。提交前部门 / 岗位 / 地点走另一条接口 `getHrmSimpleInfo`，见 5.7 与 [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) 第 7 节。
 
 ```text
 企微 requesterSenderId（现网：加密 userid）
@@ -271,8 +271,8 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 
 ## 8. 落地清单（不改插件的前提下）
 
-1. 把管理员给的 **appid** 写入实际加载的 `~/aidy/extensions/oa-workflow-bridge-redis/bridge-config.json`（不要写进 `oa_api_user_id.txt`）。规则包按 `active=true`；现网是否调用 `doCreateRequest` 看该文件。切流核对见 OA Redis 手册第 10 节。
-2. **AppSecret** 写入 `~/aidy/secrets/oa_app_secret.txt`（`printf`、chmod 600、uid 1000）。不要提交 git、不要贴到群聊。
+1. 把管理员给的 **appid** 写入实际加载的 `~/xa/extensions/oa-workflow-bridge-redis/bridge-config.json`（不要写进 `oa_api_user_id.txt`）。规则包按 `active=true`；现网是否调用 `doCreateRequest` 看该文件。切流核对见 OA Redis 手册第 10 节。
+2. **AppSecret** 写入 `~/xa/secrets/oa_app_secret.txt`（`printf`、chmod 600、uid 1000）。不要提交 git、不要贴到群聊。
 3. **接口账号人员 id**：已知该账号工号时，按 Ecology 第四步调 `getHrmUserInfoWithPage`，只把 `data.dataList[].id` 写入 `oa_api_user_id.txt`。也可请管理员从人员卡片读取。不要把工号、appid 或 `wo…` 写入该文件。
 4. 确认 RSA 公钥 `publicKeySpkiBase64` 是否仍为现网 `bridge-config.json` 那一把；新应用若给了新 `spk` 必须更换。
 5. `identity.adapter=on` 且 `identity.store=redis`；适配器包与桥接并列。自建应用 `WECOM_IDENTITY_CORPID` / `WECOM_IDENTITY_SECRET`：**宿主机写 txt 不够**，必须 compose 挂载 + entrypoint 在 `exec` 前 export + `compose down && up`（只重建 Gateway，Redis 保持 up）。漏挂时 `prepare` 回执是 `OA_IDENTITY_NOT_CONFIGURED`。整份 YAML / 脚本见 OA Redis 手册 5.5；校验见 [身份适配器说明.md](身份适配器说明.md) 第 10.7 节。
@@ -311,7 +311,7 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 
 | 文档 | 内容 |
 | --- | --- |
-| [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) | OA 主路径、切入范围、各层 I/O |
+| [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) | OA 主路径、切入范围、各层 I/O |
 | [身份适配器说明.md](身份适配器说明.md) | 转换层：独立包、Redis `idmap`、凭据与注入 |
 | [OA Workflow Bridge（Redis）接入手册.md](OA%20Workflow%20Bridge（Redis）接入手册.md) | 部署、凭据注入、工具契约、错误码 |
 | [Ecology 流程创建 API 说明.md](Ecology%20流程创建%20API%20说明.md) | applytoken / 建单 / 用工号查人员 |

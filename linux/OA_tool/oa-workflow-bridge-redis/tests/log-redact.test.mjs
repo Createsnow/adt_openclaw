@@ -5,7 +5,7 @@ import { maskFileName, maskFileNames, redactPayload } from "../src/log-redact.mj
 test("文件名只留后缀与类别，不留原名", () => {
   assert.equal(maskFileName("2026年报销单.pdf"), "***.pdf（文件类型）");
   assert.equal(maskFileName("张三的工位截图.PNG"), "***.png（图片类型）");
-  assert.equal(maskFileName("/home/aidy/media/inbound/身份证.jpg"), "***.jpg（图片类型）");
+  assert.equal(maskFileName("/home/xa/media/inbound/身份证.jpg"), "***.jpg（图片类型）");
   assert.equal(maskFileName("没有后缀"), "***（文件类型）");
   assert.equal(maskFileName(""), "***（文件类型）");
 });

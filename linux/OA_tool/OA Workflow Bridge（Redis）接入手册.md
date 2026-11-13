@@ -43,16 +43,16 @@
 
 ## 2. 架构
 
-### 2.1 在 Aidy 中的位置
+### 2.1 在 xA 中的位置
 
-全景（含切入 OA 的范围、各层 I/O）见 `../Aidy 现网加固与演进全景.md`。本节只画本插件接到 OA 的位置。
+全景（含切入 OA 的范围、各层 I/O）见 `../xA 现网加固与演进全景.md`。本节只画本插件接到 OA 的位置。
 
 ```text
 企业微信员工
     ↓
 wecom-openclaw-plugin（通道 + 可信身份 requesterSenderId）
     ↓
-Aidy Agent（itservicedeskagent）
+xA Agent（itservicedeskagent）
     ↓ 理解对话、整理 draft
 oa-workflow-bridge-redis（工具 oa_workflow）
     ├── 身份适配器     进程内包；prepare miss：企微 + getHrmUserInfoWithPage → SET EX idmap（不注册模型 tool）
@@ -124,7 +124,7 @@ OpenClaw 发现顺序（官方）：`plugins.load.paths` → workspace extension
 
 ### 3.1 Key 规范
 
-默认前缀：`oa-workflow-bridge`（可在 `bridge-config.json` → `redis.keyPrefix` 修改）。插件 id 是 `oa-workflow-bridge-redis`，**key 前缀默认不带 `-redis`**。多环境应改 `keyPrefix`（如 `oa-bridge-aidy-it`），不要和其它业务共用前缀。
+默认前缀：`oa-workflow-bridge`（可在 `bridge-config.json` → `redis.keyPrefix` 修改）。插件 id 是 `oa-workflow-bridge-redis`，**key 前缀默认不带 `-redis`**。多环境应改 `keyPrefix`（如 `oa-bridge-xa-it`），不要和其它业务共用前缀。
 
 | Key 模式 | 内容 | TTL |
 | --- | --- | --- |
@@ -287,11 +287,11 @@ OpenClaw 发现顺序（官方）：`plugins.load.paths` → workspace extension
 
 1. 环境变量 **`OPENCLAW_STATE_DIR`**
 2. 环境变量 `OPENCLAW_CONFIG_PATH` 的父目录
-3. 回落 `{homedir}/.openclaw-aidy-it-service`
+3. 回落 `{homedir}/.openclaw-xa-it-service`
 
 Docker 必须设 `OPENCLAW_STATE_DIR=/home/node/.openclaw`（与 config 挂载一致）。不设则附件不在当前 volume 上，重启或确认时会 `STAGING_MISSING`。
 
-数据必须在 Linux 文件系统上（`~/aidy/config`），不要放 `/mnt/c`。
+数据必须在 Linux 文件系统上（`~/xa/config`），不要放 `/mnt/c`。
 
 ### 3.7 Redis 连接与持久化
 
@@ -320,7 +320,7 @@ Docker 必须设 `OPENCLAW_STATE_DIR=/home/node/.openclaw`（与 config 挂载�
 
 ### 4.2 安装插件依赖
 
-**约定：** 部署时装一次，`node_modules` 留在挂载目录 `~/aidy/extensions/oa-workflow-bridge-redis/`。Gateway **启动时不再访问 npm**。WSL2 与 Linux 服务器 Docker **同一套命令**。
+**约定：** 部署时装一次，`node_modules` 留在挂载目录 `~/xa/extensions/oa-workflow-bridge-redis/`。Gateway **启动时不再访问 npm**。WSL2 与 Linux 服务器 Docker **同一套命令**。
 
 **不要：**
 
@@ -340,12 +340,12 @@ Docker 必须设 `OPENCLAW_STATE_DIR=/home/node/.openclaw`（与 config 挂载�
 `compose ps` 为 `Restarting` 时 **IMAGE** 列仍然可信，不要 `docker exec`。先看本机实际名字：
 
 ```bash
-cd ~/aidy
+cd ~/xa
 docker compose ps
 docker images | grep openclaw
 ```
 
-以 **IMAGE** 列为准。还没 `up`：看 `docker images` 和 `~/aidy/docker-compose.yml` 的 `image:`。
+以 **IMAGE** 列为准。还没 `up`：看 `docker images` 和 `~/xa/docker-compose.yml` 的 `image:`。
 
 | 本机实际名字 | 何时出现 | 用哪条命令 |
 | --- | --- | --- |
@@ -360,12 +360,12 @@ docker images | grep openclaw
 **Hub 名**（本机已有 `openclaw/openclaw:latest`）：
 
 ```bash
-sudo chown -R 1000:1000 ~/aidy/extensions
+sudo chown -R 1000:1000 ~/xa/extensions
 
 docker run --rm --user 1000:1000 \
   -e HOME=/tmp \
   -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/aidy/extensions/oa-workflow-bridge-redis:/app" \
+  -v "$HOME/xa/extensions/oa-workflow-bridge-redis:/app" \
   -w /app \
   openclaw/openclaw:latest \
   npm install --omit=dev
@@ -374,12 +374,12 @@ docker run --rm --user 1000:1000 \
 **GHCR 钉版本**（本仓库 `docker/docker-compose.yml` 的 `image:`）：
 
 ```bash
-sudo chown -R 1000:1000 ~/aidy/extensions
+sudo chown -R 1000:1000 ~/xa/extensions
 
 docker run --rm --user 1000:1000 \
   -e HOME=/tmp \
   -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/aidy/extensions/oa-workflow-bridge-redis:/app" \
+  -v "$HOME/xa/extensions/oa-workflow-bridge-redis:/app" \
   -w /app \
   ghcr.io/openclaw/openclaw:2026.9.2 \
   npm install --omit=dev
@@ -388,12 +388,12 @@ docker run --rm --user 1000:1000 \
 **GHCR 名**（本机没有 `openclaw/openclaw`，`compose ps` 的 IMAGE 为 `ghcr.io/openclaw/openclaw:latest`）：
 
 ```bash
-sudo chown -R 1000:1000 ~/aidy/extensions
+sudo chown -R 1000:1000 ~/xa/extensions
 
 docker run --rm --user 1000:1000 \
   -e HOME=/tmp \
   -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/aidy/extensions/oa-workflow-bridge-redis:/app" \
+  -v "$HOME/xa/extensions/oa-workflow-bridge-redis:/app" \
   -w /app \
   ghcr.io/openclaw/openclaw:latest \
   npm install --omit=dev
@@ -411,7 +411,7 @@ docker tag ghcr.io/openclaw/openclaw:latest openclaw/openclaw:latest
 docker run --rm --user 1000:1000 \
   -e HOME=/tmp \
   -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/aidy/extensions/wecom-oa-identity-adapter:/app" \
+  -v "$HOME/xa/extensions/wecom-oa-identity-adapter:/app" \
   -w /app \
   openclaw/openclaw:latest \
   npm install --omit=dev
@@ -422,14 +422,14 @@ docker run --rm --user 1000:1000 \
 核对桥接三包、适配器 `redis` 后再起 Gateway：
 
 ```bash
-ls ~/aidy/extensions/oa-workflow-bridge-redis/node_modules/redis
-ls ~/aidy/extensions/oa-workflow-bridge-redis/node_modules/jpeg-js
-ls ~/aidy/extensions/oa-workflow-bridge-redis/node_modules/pngjs
-ls ~/aidy/extensions/wecom-oa-identity-adapter/node_modules/redis
-cd ~/aidy && docker compose down && docker compose up -d
+ls ~/xa/extensions/oa-workflow-bridge-redis/node_modules/redis
+ls ~/xa/extensions/oa-workflow-bridge-redis/node_modules/jpeg-js
+ls ~/xa/extensions/oa-workflow-bridge-redis/node_modules/pngjs
+ls ~/xa/extensions/wecom-oa-identity-adapter/node_modules/redis
+cd ~/xa && docker compose down && docker compose up -d
 ```
 
-独立 Redis（`~/aidy-redis`）保持 up。已在跑的 Gateway 只 `up -d` 不会重载插件，必须 `down && up`。
+独立 Redis（`~/xa-redis`）保持 up。已在跑的 Gateway 只 `up -d` 不会重载插件，必须 `down && up`。
 
 **缺 `redis`（2026-09-02 曾现网发生）：** Gateway 日志仍可能有 `loaded (Redis state)`，紧接着 `Redis init failed: Cannot find package 'redis'`。员工侧「确认准备失败」，工单号已生成但 pending 未写入。不是独立 Redis 挂了，也还没调 Ecology。
 
@@ -453,7 +453,7 @@ npm test
 
 ### 4.3 部署 Redis
 
-生产 Redis 是独立机器或托管实例；OpenClaw **只通过 `OA_REDIS_URL` 连接**。本机（Windows 工作站 + WSL2）用 **独立 Linux 容器**（`~/aidy-redis`）模拟这层隔离。
+生产 Redis 是独立机器或托管实例；OpenClaw **只通过 `OA_REDIS_URL` 连接**。本机（Windows 工作站 + WSL2）用 **独立 Linux 容器**（`~/xa-redis`）模拟这层隔离。
 
 | 不要做 | 原因 |
 | --- | --- |
@@ -464,7 +464,7 @@ npm test
 
 完整拓扑、密码分边、AOF、`noeviction` 见 **`../Redis 独立实例部署手册.md`**（独立 Redis compose 为默认路径）。Gateway 怎么连（compose 增量、entrypoint、启停顺序）见第 5.5 节。
 
-Windows **原生 OpenClaw**（非 Docker）可连 WSL2 / 本机 Linux 容器映射出的 `127.0.0.1:6379`。Gateway 若跑在容器里，应使用 Docker 网络主机名（如 `redis://aidy-redis:6379`）。
+Windows **原生 OpenClaw**（非 Docker）可连 WSL2 / 本机 Linux 容器映射出的 `127.0.0.1:6379`。Gateway 若跑在容器里，应使用 Docker 网络主机名（如 `redis://xa-redis:6379`）。
 
 ---
 
@@ -476,14 +476,14 @@ Windows **原生 OpenClaw**（非 Docker）可连 WSL2 / 本机 Linux 容器映�
 
 ```bash
 # 不要与文件版同时拷进 extensions 后双开
-cp -r /path/to/oa-workflow-bridge-redis ~/aidy/extensions/oa-workflow-bridge-redis
+cp -r /path/to/oa-workflow-bridge-redis ~/xa/extensions/oa-workflow-bridge-redis
 # 依赖安装见 4.2（官方镜像；镜像名以 compose ps 的 IMAGE / docker images 为准；不要在宿主执行 npm）
 ```
 
 本仓库路径示例：
 
 ```bash
-cp -r "$REPO/OA_tool/oa-workflow-bridge-redis" ~/aidy/extensions/
+cp -r "$REPO/OA_tool/oa-workflow-bridge-redis" ~/xa/extensions/
 ```
 
 `REPO` 是本仓库根目录。不要再拷文件版 `oa-workflow-bridge`。
@@ -551,12 +551,12 @@ cp -r "$REPO/OA_tool/oa-workflow-bridge-redis" ~/aidy/extensions/
 示例（宿主机或 Windows 原生；Docker 由 entrypoint 注入，见 5.5）：
 
 ```bash
-export OA_REDIS_URL="redis://:yourpassword@aidy-redis:6379/0"
+export OA_REDIS_URL="redis://:yourpassword@xa-redis:6379/0"
 ```
 
 ### 5.4 bridge-config.json
 
-仓库现网文件见 `OA_tool/oa-workflow-bridge-redis/bridge-config.json`。**初装**按两本安装手册保持 `active=false`；**现网**该文件为 `active: true`。`appId` 以实际加载的 json 为准（仓库样例是 `2026-09-01-lijinjin`，不是 `oa-develop`）。`redis.url` 现网文件留空，生产由进程环境变量 `OA_REDIS_URL` 覆盖成 `aidy-redis`。裸跑或本机调试用 `bridge-config.example.json`（`active: false`，`redis://127.0.0.1:6379`），不要把 example 直接当现网。
+仓库现网文件见 `OA_tool/oa-workflow-bridge-redis/bridge-config.json`。**初装**按两本安装手册保持 `active=false`；**现网**该文件为 `active: true`。`appId` 以实际加载的 json 为准（仓库样例是 `2026-09-01-lijinjin`，不是 `oa-develop`）。`redis.url` 现网文件留空，生产由进程环境变量 `OA_REDIS_URL` 覆盖成 `xa-redis`。裸跑或本机调试用 `bridge-config.example.json`（`active: false`，`redis://127.0.0.1:6379`），不要把 example 直接当现网。
 
 ```json
 {
@@ -572,7 +572,7 @@ export OA_REDIS_URL="redis://:yourpassword@aidy-redis:6379/0"
   "maxAttachmentBytes": 10485760,
   "maxTotalAttachmentBytes": 26214400,
   "redis": {
-    "url": "redis://aidy-redis:6379/0",
+    "url": "redis://xa-redis:6379/0",
     "keyPrefix": "oa-workflow-bridge",
     "database": 0
   },
@@ -610,24 +610,24 @@ export OA_REDIS_URL="redis://:yourpassword@aidy-redis:6379/0"
 
 官方 Compose secrets 挂到容器内 `/run/secrets/<name>`。OpenClaw **不读** `*_FILE` 变量，由 entrypoint 读文件再 `export`。身份映射走 Redis `idmap`，不要把映射文件挂进 workspace 或 `.openclaw`。
 
-**不要**把 `OA_REDIS_URL` 写进 compose 的 `environment:`（`docker inspect` 会看到密码）。独立 Redis 服务本身在 `~/aidy-redis`（怎么跑、密码分边、AOF 见 **`../Redis 独立实例部署手册.md` 第 3 节**）。
+**不要**把 `OA_REDIS_URL` 写进 compose 的 `environment:`（`docker inspect` 会看到密码）。独立 Redis 服务本身在 `~/xa-redis`（怎么跑、密码分边、AOF 见 **`../Redis 独立实例部署手册.md` 第 3 节**）。
 
-**不要**在 `~/aidy/docker-compose.yml` 里再声明 `aidy-redis` 服务，也不要 `depends_on: aidy-redis`（跨 compose 项目找不到对方服务）。启动顺序靠运维：先 Redis，再 Gateway。
+**不要**在 `~/xa/docker-compose.yml` 里再声明 `xa-redis` 服务，也不要 `depends_on: xa-redis`（跨 compose 项目找不到对方服务）。启动顺序靠运维：先 Redis，再 Gateway。
 
 #### 5.5.1 Gateway compose 增量
 
-在现有 `aidy-gateway` 上增加：**自己的** `oa_redis_password` secret、OA 凭据、自建应用转换凭据、`aidy-shared` 外部网络。**生产 image / TZ / logging 以仓库 `docker/docker-compose.yml` 为准**（现网钉 `ghcr.io/openclaw/openclaw:2026.9.2`）；安装手册初装阶段仍可用 Hub `latest`。  
-`oa_redis_password` 的 `file:` 只能是 `./secrets/oa_redis_password.txt`（即 `~/aidy/secrets/`），**不要**指向 `~/aidy-redis/`。密码文件本身按 Redis 手册第 3.1 节两边各写一份。
+在现有 `xa-gateway` 上增加：**自己的** `oa_redis_password` secret、OA 凭据、自建应用转换凭据、`xa-shared` 外部网络。**生产 image / TZ / logging 以仓库 `docker/docker-compose.yml` 为准**（现网钉 `ghcr.io/openclaw/openclaw:2026.9.2`）；安装手册初装阶段仍可用 Hub `latest`。  
+`oa_redis_password` 的 `file:` 只能是 `./secrets/oa_redis_password.txt`（即 `~/xa/secrets/`），**不要**指向 `~/xa-redis/`。密码文件本身按 Redis 手册第 3.1 节两边各写一份。
 
 第三套凭据（`WECOM_IDENTITY_*`，与 BotSecret、OA AppSecret 不是一套）的含义、禁止复用与校验见 `身份适配器说明.md` 第 10.6 / 10.7 节。下面整份 YAML **已含**这两项；只复制本小节时不要再删掉，否则宿主机有 `wecom_identity_*.txt`、容器仍 `OA_IDENTITY_NOT_CONFIGURED`。
 
 OA 核心凭据与 Redis 密码一样走 Compose secrets。身份映射走 Redis `idmap`（不要目录 volume）。先建文件，compose 才能 `up`：
 
 ```bash
-printf '%s' '你的OA人员资源ID' > ~/aidy/secrets/oa_api_user_id.txt
-printf '%s' '已轮换的AppSecret' > ~/aidy/secrets/oa_app_secret.txt
-chmod 600 ~/aidy/secrets/oa_api_user_id.txt ~/aidy/secrets/oa_app_secret.txt
-sudo chown 1000:1000 ~/aidy/secrets/oa_api_user_id.txt ~/aidy/secrets/oa_app_secret.txt
+printf '%s' '你的OA人员资源ID' > ~/xa/secrets/oa_api_user_id.txt
+printf '%s' '已轮换的AppSecret' > ~/xa/secrets/oa_app_secret.txt
+chmod 600 ~/xa/secrets/oa_api_user_id.txt ~/xa/secrets/oa_app_secret.txt
+sudo chown 1000:1000 ~/xa/secrets/oa_api_user_id.txt ~/xa/secrets/oa_app_secret.txt
 ```
 
 AppSecret 未轮换前可以先放占位，Gateway 能起来；只读预检和 `prepare` 仍会 `NOT_CONFIGURED`，直到写入真值并 `down && up`。
@@ -636,9 +636,9 @@ AppSecret 未轮换前可以先放占位，Gateway 能起来；只读预检和 `
 
 ```yaml
 services:
-  aidy-gateway:
+  xa-gateway:
     image: ghcr.io/openclaw/openclaw:2026.9.2
-    container_name: aidy-gateway
+    container_name: xa-gateway
     user: "1000:1000"
     restart: unless-stopped
     logging:
@@ -685,10 +685,10 @@ services:
       retries: 5
       start_period: 40s
     networks:
-      - aidy-shared
+      - xa-shared
 
 networks:
-  aidy-shared:
+  xa-shared:
     external: true
 
 secrets:
@@ -720,7 +720,7 @@ secrets:
 
 转换凭据文件怎么写、禁止复用 BotSecret，见 `身份适配器说明.md` 第 10.6 节。不要把映射文件挂进 `/home/node/.openclaw` 或 workspace。`identity.adapter=on` 时这两个 secret **必须**挂上；只建 txt、不改 compose，容器里是 `WECOM_IDENTITY_FILES_MISSING`。
 
-`OPENCLAW_STATE_DIR=/home/node/.openclaw` 必须设。插件默认回落 `~/.openclaw-aidy-it-service`，不在当前挂载卷里，附件 staging 会丢。
+`OPENCLAW_STATE_DIR=/home/node/.openclaw` 必须设。插件默认回落 `~/.openclaw-xa-it-service`，不在当前挂载卷里，附件 staging 会丢。
 
 #### 5.5.2 Gateway entrypoint：拼 `OA_REDIS_URL`
 
@@ -735,7 +735,7 @@ Redis、OA 凭据、转换凭据都要加在阶段 B 的模型 export **之后**
 ```sh
 export OPENCLAW_STATE_DIR="/home/node/.openclaw"
 REDIS_PASS="$(tr -d '\n' < /run/secrets/oa_redis_password)"
-export OA_REDIS_URL="redis://:${REDIS_PASS}@aidy-redis:6379/0"
+export OA_REDIS_URL="redis://:${REDIS_PASS}@xa-redis:6379/0"
 export OA_API_USER_ID="$(tr -d '\n' < /run/secrets/oa_api_user_id)"
 export OA_APP_SECRET="$(tr -d '\n' < /run/secrets/oa_app_secret)"
 export WECOM_IDENTITY_CORPID="$(tr -d '\n' < /run/secrets/wecom_identity_corpid)"
@@ -744,10 +744,10 @@ export WECOM_IDENTITY_SECRET="$(tr -d '\n' < /run/secrets/wecom_identity_secret)
 
 | 项 | 说明 |
 | --- | --- |
-| 读哪个文件 | 只读 `/run/secrets/oa_redis_password`（来自 `~/aidy/secrets/oa_redis_password.txt`） |
-| 不要读 | Redis 容器的 `/run/secrets/redis_password`、`~/aidy-redis/secrets/` |
-| URL 形态 | `redis://:密码@aidy-redis:6379/0`（用户名为空，密码在第一个 `:` 后面） |
-| 主机名 | 本机 Docker 网络里是 `aidy-redis`，**不是** `127.0.0.1` |
+| 读哪个文件 | 只读 `/run/secrets/oa_redis_password`（来自 `~/xa/secrets/oa_redis_password.txt`） |
+| 不要读 | Redis 容器的 `/run/secrets/redis_password`、`~/xa-redis/secrets/` |
+| URL 形态 | `redis://:密码@xa-redis:6379/0`（用户名为空，密码在第一个 `:` 后面） |
+| 主机名 | 本机 Docker 网络里是 `xa-redis`，**不是** `127.0.0.1` |
 | 库号 | `/0` 须与 `bridge-config.json` 的 `redis.database` 一致 |
 | 编码 | Redis 手册第 3.1 节用 hex 生成的密码不必 URL 编码；若密码含 `@` `:` `/` 则必须编码 |
 | 换云 Redis | 只改主机（或改成 `rediss://`），见 Redis 手册第 5 节 |
@@ -759,10 +759,10 @@ export WECOM_IDENTITY_SECRET="$(tr -d '\n' < /run/secrets/wecom_identity_secret)
 
 ##### 5.5.2.2 整文件替换（推荐）
 
-与安装手册阶段 B 的 entrypoint 对齐，再加 Redis、OA 凭据与转换凭据：**工位**见 WSL2 手册 **6.4.2**；**Linux 服务器**见该手册 **第 7 节**（第一份）与 **第 18 节**（拼 `OA_REDIS_URL`）。已接 OA 后**不要**再用安装手册里那份尚无 `WECOM_IDENTITY_*` 的 entrypoint 整段覆盖本文件。用下面整份覆盖 `~/aidy/entrypoint.sh`，避免漏插或插错位置：
+与安装手册阶段 B 的 entrypoint 对齐，再加 Redis、OA 凭据与转换凭据：**工位**见 WSL2 手册 **6.4.2**；**Linux 服务器**见该手册 **第 7 节**（第一份）与 **第 18 节**（拼 `OA_REDIS_URL`）。已接 OA 后**不要**再用安装手册里那份尚无 `WECOM_IDENTITY_*` 的 entrypoint 整段覆盖本文件。用下面整份覆盖 `~/xa/entrypoint.sh`，避免漏插或插错位置：
 
 ```bash
-cat > ~/aidy/entrypoint.sh <<'EOF'
+cat > ~/xa/entrypoint.sh <<'EOF'
 #!/bin/sh
 set -eu
 for secret in \
@@ -791,15 +791,15 @@ export OPENCLAW_GATEWAY_TOKEN="$(tr -d '\n' < /run/secrets/gateway_token)"
 
 export OPENCLAW_STATE_DIR="/home/node/.openclaw"
 
-# 模型凭据（api 协议写死在 openclaw.json，不再注入 AIDY_DOMESTIC_API）
-export AIDY_DOMESTIC_API_KEY="$(tr -d '\n' < /run/secrets/model_api_key)"
-export AIDY_DOMESTIC_BASE_URL="$(tr -d '\n' < /run/secrets/model_base_url)"
-export AIDY_DOMESTIC_MODEL_ID="$(tr -d '\n' < /run/secrets/model_id)"
-export AIDY_DOMESTIC_MODEL_REF="$(tr -d '\n' < /run/secrets/model_ref)"
+# 模型凭据（api 协议写死在 openclaw.json，不再注入 XA_DOMESTIC_API）
+export XA_DOMESTIC_API_KEY="$(tr -d '\n' < /run/secrets/model_api_key)"
+export XA_DOMESTIC_BASE_URL="$(tr -d '\n' < /run/secrets/model_base_url)"
+export XA_DOMESTIC_MODEL_ID="$(tr -d '\n' < /run/secrets/model_id)"
+export XA_DOMESTIC_MODEL_REF="$(tr -d '\n' < /run/secrets/model_ref)"
 
 # 企微机器人访问凭据
-export AIDY_IT_WECOM_BOT_ID="$(tr -d '\n' < /run/secrets/wecom_bot_id)"
-export AIDY_IT_WECOM_BOT_SECRET="$(tr -d '\n' < /run/secrets/wecom_bot_secret)"
+export XA_IT_WECOM_BOT_ID="$(tr -d '\n' < /run/secrets/wecom_bot_id)"
+export XA_IT_WECOM_BOT_SECRET="$(tr -d '\n' < /run/secrets/wecom_bot_secret)"
 
 # 企业微信访问凭据
 export WECOM_IDENTITY_CORPID="$(tr -d '\n' < /run/secrets/wecom_identity_corpid)"
@@ -807,7 +807,7 @@ export WECOM_IDENTITY_SECRET="$(tr -d '\n' < /run/secrets/wecom_identity_secret)
 
 # 连接redis
 REDIS_PASS="$(tr -d '\n' < /run/secrets/oa_redis_password)"
-export OA_REDIS_URL="redis://:${REDIS_PASS}@aidy-redis:6379/0"
+export OA_REDIS_URL="redis://:${REDIS_PASS}@xa-redis:6379/0"
 
 # OA系统开门凭据
 export OA_API_USER_ID="$(tr -d '\n' < /run/secrets/oa_api_user_id)"
@@ -815,8 +815,8 @@ export OA_APP_SECRET="$(tr -d '\n' < /run/secrets/oa_app_secret)"
 
 exec node dist/index.js gateway --bind lan --port 18789
 EOF
-chmod 755 ~/aidy/entrypoint.sh
-sudo chown 1000:1000 ~/aidy/entrypoint.sh
+chmod 755 ~/xa/entrypoint.sh
+sudo chown 1000:1000 ~/xa/entrypoint.sh
 ```
 
 compose 用 `entrypoint: ["/bin/sh", "/entrypoint.sh"]` 时，即使文件没有 shebang 也能跑；仍建议保留 `#!/bin/sh`。
@@ -824,10 +824,10 @@ compose 用 `entrypoint: ["/bin/sh", "/entrypoint.sh"]` 时，即使文件没有
 改完必须重建 Gateway，**只 `restart` 不够**（entrypoint 在创建容器时执行）：
 
 ```bash
-cd ~/aidy && docker compose down && docker compose up -d
+cd ~/xa && docker compose down && docker compose up -d
 ```
 
-Redis 保持 `~/aidy-redis` 里 `up`，不要 `down`。
+Redis 保持 `~/xa-redis` 里 `up`，不要 `down`。
 
 ##### 5.5.2.3 怎么确认已经注入（不要用 `docker exec` 看环境变量）
 
@@ -836,7 +836,7 @@ Redis 保持 `~/aidy-redis` 里 `up`，不要 `down`。
 看 **Gateway 主进程**（`init: true` 时 PID 1 是 tini，变量在 `node` 上）。只判断有没有注入，**不要**打印 URL（里面是密码）：
 
 ```bash
-docker exec aidy-gateway sh -c '
+docker exec xa-gateway sh -c '
   for d in /proc/[0-9]*; do
     tr "\0" "\n" < "$d/environ" 2>/dev/null | grep -q "^OA_REDIS_URL=redis://" || continue
     echo OA_REDIS_URL_INJECTED
@@ -850,9 +850,9 @@ docker exec aidy-gateway sh -c '
 输出 `OA_REDIS_URL_INJECTED` 即可。secret 是否挂上：
 
 ```bash
-docker exec aidy-gateway sh -c 'test -s /run/secrets/oa_redis_password && echo SECRET_OK'
-docker exec aidy-gateway sh -c 'test -s /run/secrets/oa_api_user_id && test -s /run/secrets/oa_app_secret && echo OA_SECRET_FILES_OK'
-docker exec aidy-gateway sh -c 'test -s /run/secrets/wecom_identity_corpid && test -s /run/secrets/wecom_identity_secret && echo WECOM_IDENTITY_FILES_OK'
+docker exec xa-gateway sh -c 'test -s /run/secrets/oa_redis_password && echo SECRET_OK'
+docker exec xa-gateway sh -c 'test -s /run/secrets/oa_api_user_id && test -s /run/secrets/oa_app_secret && echo OA_SECRET_FILES_OK'
+docker exec xa-gateway sh -c 'test -s /run/secrets/wecom_identity_corpid && test -s /run/secrets/wecom_identity_secret && echo WECOM_IDENTITY_FILES_OK'
 ```
 
 查 OA / 转换环境变量是否注入时，把上面 `/proc` 循环里的 `OA_REDIS_URL=redis://` 换成 `OA_API_USER_ID=` / `OA_APP_SECRET=` / `WECOM_IDENTITY_CORPID=`（转换凭据还须同时命中 `WECOM_IDENTITY_SECRET=`），同样只判断有无，不要打印值。完整对照命令见 `身份适配器说明.md` 第 10.7 节。
@@ -862,7 +862,7 @@ docker exec aidy-gateway sh -c 'test -s /run/secrets/wecom_identity_corpid && te
 | 现象 | 原因 |
 | --- | --- |
 | 主进程 `OA_REDIS_URL_MISSING` | 三行在 `exec` 之后、未 `down/up`、或 `oa_redis_password` 未挂进 compose |
-| 容器 Restarting，日志 `oa_redis_password: No such file` | `~/aidy/secrets/oa_redis_password.txt` 不存在或 compose `secrets.file` 路径错 |
+| 容器 Restarting，日志 `oa_redis_password: No such file` | `~/xa/secrets/oa_redis_password.txt` 不存在或 compose `secrets.file` 路径错 |
 | 容器 Restarting，日志 `oa_api_user_id: No such file` | 未建 OA secret 文件；按第 5.5.1 节先建两个 txt |
 | 容器 Restarting，日志 `wecom_identity_corpid: No such file` | compose 已声明转换 secret，但宿主机 txt 不存在或路径错 |
 | `WECOM_IDENTITY_FILES_MISSING` 且容器 Up | 宿主机有 txt，compose **未**声明 `wecom_identity_*` |
@@ -873,25 +873,25 @@ docker exec aidy-gateway sh -c 'test -s /run/secrets/wecom_identity_corpid && te
 #### 5.5.3 启停顺序
 
 ```bash
-cd ~/aidy-redis && docker compose up -d
-cd ~/aidy       && docker compose up -d
+cd ~/xa-redis && docker compose up -d
+cd ~/xa       && docker compose up -d
 
 # 只停应用
-cd ~/aidy && docker compose stop
+cd ~/xa && docker compose stop
 
 # 停 Redis（先停 Gateway）
-cd ~/aidy && docker compose stop
-cd ~/aidy-redis && docker compose stop
+cd ~/xa && docker compose stop
+cd ~/xa-redis && docker compose stop
 ```
 
-`cd ~/aidy && docker compose down` **不会**停 `~/aidy-redis`，这是预期。
+`cd ~/xa && docker compose down` **不会**停 `~/xa-redis`，这是预期。
 
 ### 5.6 验证插件已加载
 
 ```bash
 # Docker
-docker exec -it aidy-gateway node dist/index.js plugins list
-docker exec -it aidy-gateway node dist/index.js config validate
+docker exec -it xa-gateway node dist/index.js plugins list
+docker exec -it xa-gateway node dist/index.js config validate
 ```
 
 应看到 `oa-workflow-bridge-redis` 且 `enabled`。Gateway 日志中应有：
@@ -906,7 +906,7 @@ docker exec -it aidy-gateway node dist/index.js config validate
 
 ### 5.7 Agent 工具白名单
 
-即使插件已 loaded，Agent 也必须把 `oa_workflow` 加入 `tools.alsoAllow` 才能调用。Aidy 使用 `tools.profile: minimal`，官方要求插件工具用 `alsoAllow` 追加（见 [config-tools](https://docs.openclaw.ai/gateway/config-tools)）。本插件只登记工具、不登记通道；`plugins.allow` 与 `alsoAllow` 两层都要开。插件 vs 工具、以及去掉 `wecom_mcp` 不会关企微通道，见 `../openclaw.json 配置参考.md` 第 5.5 节。
+即使插件已 loaded，Agent 也必须把 `oa_workflow` 加入 `tools.alsoAllow` 才能调用。xA 使用 `tools.profile: minimal`，官方要求插件工具用 `alsoAllow` 追加（见 [config-tools](https://docs.openclaw.ai/gateway/config-tools)）。本插件只登记工具、不登记通道；`plugins.allow` 与 `alsoAllow` 两层都要开。插件 vs 工具、以及去掉 `wecom_mcp` 不会关企微通道，见 `../openclaw.json 配置参考.md` 第 5.5 节。
 
 **现网：** 全局 `tools.alsoAllow` 与 `agents.entries.itservicedeskagent.tools.alsoAllow` **均只含** `oa_workflow`，**不含** `read` / `wecom_mcp` / `write` / `edit` / `memory_*` / `message`。Agent 级 `deny` 含 `group:fs`。完整 json 见 `../openclaw.json 配置参考.md` 第 15 节。规则包按 `active=true` 执行。
 
@@ -928,8 +928,8 @@ OA 接口侧身份规则见 [Ecology 流程创建 API 说明.md](Ecology%20流�
 
 | 凭据引用 ID | 用途 |
 | --- | --- |
-| `oa/aidy-it-service/api-user-id` | 只读预检人员 id。**不是**建单 Header（建单用申请人）。仍须注入 |
-| `oa/aidy-it-service/app-secret` | OA 应用密钥（仅 `applytoken`） |
+| `oa/xa-it-service/api-user-id` | 只读预检人员 id。**不是**建单 Header（建单用申请人）。仍须注入 |
+| `oa/xa-it-service/app-secret` | OA 应用密钥（仅 `applytoken`） |
 
 **Docker 路径：** 核心凭据走 Compose secrets → entrypoint 环境变量。身份映射走 Redis `idmap`。`secret-resolver.mjs` 已删除映射目录与 DPAPI；缺 `OA_API_USER_ID` / `OA_APP_SECRET` 就是缺凭据。
 
@@ -937,11 +937,11 @@ OA 接口侧身份规则见 [Ecology 流程创建 API 说明.md](Ecology%20流�
 
 | 宿主机 | 容器 | 本插件读取 |
 | --- | --- | --- |
-| `~/aidy/secrets/oa_api_user_id.txt` | `/run/secrets/oa_api_user_id` | `OA_API_USER_ID` |
-| `~/aidy/secrets/oa_app_secret.txt` | `/run/secrets/oa_app_secret` | `OA_APP_SECRET` |
-| `~/aidy/secrets/oa_redis_password.txt` | `/run/secrets/oa_redis_password` | 仅 entrypoint 用来拼 `OA_REDIS_URL`；插件不直接读该文件 |
-| `~/aidy/secrets/wecom_identity_corpid.txt` | `/run/secrets/wecom_identity_corpid` | `WECOM_IDENTITY_CORPID`（适配器；与 BotSecret 分开） |
-| `~/aidy/secrets/wecom_identity_secret.txt` | `/run/secrets/wecom_identity_secret` | `WECOM_IDENTITY_SECRET` |
+| `~/xa/secrets/oa_api_user_id.txt` | `/run/secrets/oa_api_user_id` | `OA_API_USER_ID` |
+| `~/xa/secrets/oa_app_secret.txt` | `/run/secrets/oa_app_secret` | `OA_APP_SECRET` |
+| `~/xa/secrets/oa_redis_password.txt` | `/run/secrets/oa_redis_password` | 仅 entrypoint 用来拼 `OA_REDIS_URL`；插件不直接读该文件 |
+| `~/xa/secrets/wecom_identity_corpid.txt` | `/run/secrets/wecom_identity_corpid` | `WECOM_IDENTITY_CORPID`（适配器；与 BotSecret 分开） |
+| `~/xa/secrets/wecom_identity_secret.txt` | `/run/secrets/wecom_identity_secret` | `WECOM_IDENTITY_SECRET` |
 
 映射码为企微 `requesterSenderId` 的 SHA-256 截断 24 位小写十六进制。`prepare` 先 GET `{prefix}:idmap:{mappingCode}`；miss 由身份适配器转换后 `SET EX`。查不到人员时返回 `OA_IDENTITY_NOT_FOUND` 等，不写 pending。禁止按姓名模糊搜 OA 人员。
 
@@ -1029,7 +1029,7 @@ Token：`POST /api/ec/dev/auth/applytoken`，RSA PKCS1 加密 AppSecret；进程
 | 工单类型 | `sqlx`：运维支持 `0`、权限申请 `1`、IT 需求 `2` |
 | 系统 | `wtlx` / `szxt` / `szxtxq`（`system-options.json`） |
 | 需求类型 / 月节约工时 | `xqlx1` / `yjygsh`（仅 IT 需求） |
-| 问题详情 | `wtxqmskftp`：问题文字 + 影响范围 / 发生时间 / 已尝试措施 / 最终补充。inbound **图片**压缩为 JPEG 后以 `<img src="data:image/jpeg;base64,…">` 嵌在文字后。**不**写入 Aidy 工单编号 |
+| 问题详情 | `wtxqmskftp`：问题文字 + 影响范围 / 发生时间 / 已尝试措施 / 最终补充。inbound **图片**压缩为 JPEG 后以 `<img src="data:image/jpeg;base64,…">` 嵌在文字后。**不**写入 xA 工单编号 |
 | 文档附件 | `scfj`：只传文档。HTTP `fieldValue` 为数组的 JSON 字符串 `"[{\"filePath\":\"base64:<裸base64>\",\"fileName\":\"<含扩展名>\"}]"`。`filePath` 须带 `base64:` 前缀。有文档才写。图片不进此字段。`attachmentFieldName` 为空时带文档拒绝；仅有图片不写 `scfj`。字段释义见 [Ecology 流程创建 API 说明.md](Ecology%20流程创建%20API%20说明.md) |
 
 流程标题：`[{externalTicketId}] {summary}`，截断 120 字。`externalTicketId` 由插件生成，只作 Redis 幂等键与标题前缀，不进员工状态卡。
@@ -1106,7 +1106,7 @@ Token：`POST /api/ec/dev/auth/applytoken`，RSA PKCS1 加密 AppSecret；进程
 
 #### 7.5.1 `hintZh`（员工可见短句）
 
-实现在 `OA_tool/oa-workflow-bridge-redis/src/hints.mjs`。改中文只改这一处，再同步 `Aidy企微回复模板.md` / `AGENTS.md` 里**有独立模板**的块。
+实现在 `OA_tool/oa-workflow-bridge-redis/src/hints.mjs`。改中文只改这一处，再同步 `xA企微回复模板.md` / `AGENTS.md` 里**有独立模板**的块。
 
 | 员工侧 | 哪些 `code` | Agent 怎么做 |
 | --- | --- | --- |
@@ -1197,7 +1197,7 @@ Gateway Up，且已注入 `OA_REDIS_URL` 与 OA 凭据后：
 
 ```bash
 # Docker
-docker exec -it aidy-gateway node \
+docker exec -it xa-gateway node \
   /home/node/.openclaw/extensions/oa-workflow-bridge-redis/scripts/readonly-preflight.mjs
 ```
 
@@ -1257,7 +1257,7 @@ redis-cli -u "$OA_REDIS_URL" GET 'oa-workflow-bridge:idx:confirmation:OA-MXXXXX-
 
 ## 10. 正式切换门槛
 
-预切流已完成：`alsoAllow` 含 `oa_workflow`，workspace 规则按两阶段确认、**按 `active=true` 执行**。仓库样例 `bridge-config.json` 亦为 `true`。现网是否调用 `doCreateRequest` 以 **实际加载的** `~/aidy/extensions/oa-workflow-bridge-redis/bridge-config.json` 为准。
+预切流已完成：`alsoAllow` 含 `oa_workflow`，workspace 规则按两阶段确认、**按 `active=true` 执行**。仓库样例 `bridge-config.json` 亦为 `true`。现网是否调用 `doCreateRequest` 以 **实际加载的** `~/xa/extensions/oa-workflow-bridge-redis/bridge-config.json` 为准。
 
 下列运维项用于核对真正建单。**未按第 4.2 节给两包装 `redis` 时，`prepare` 就会失败，到不了建单**（2026-09-02 现网曾发生，现已装齐）。OA 已确认文档附件字段为 `scfj`；实际加载的 json 若仍为空，**带文档**必须拒绝。图片走 `wtxqmskftp` 内嵌，不依赖该配置：
 
@@ -1279,7 +1279,7 @@ redis-cli -u "$OA_REDIS_URL" GET 'oa-workflow-bridge:idx:confirmation:OA-MXXXXX-
 - [ ] `plugins.allow` 中 **没有** `oa-workflow-bridge`
 - [ ] `oa-workflow-bridge-redis` 与 `wecom-openclaw-plugin` 的 `entries` 都有 `hooks.allowConversationAccess: true`
 - [ ] 有回滚方案（`active=false` 并移出工具白名单）。**不要**切回文件版 `oa-workflow-bridge`
-- [x] 智能表格观察期已结束；规则包禁止 `wecom_mcp`。现网旁路已清；若 docker logs 再出现 `smartsheet_get_records`，按第 11 节核 `~/aidy` 是否被旧文件覆盖
+- [x] 智能表格观察期已结束；规则包禁止 `wecom_mcp`。现网旁路已清；若 docker logs 再出现 `smartsheet_get_records`，按第 11 节核 `~/xa` 是否被旧文件覆盖
 
 ---
 
@@ -1295,7 +1295,7 @@ redis-cli -u "$OA_REDIS_URL" GET 'oa-workflow-bridge:idx:confirmation:OA-MXXXXX-
 | `Redis init failed: Cannot find package 'redis'` | 未按 4.2 装依赖，或备份恢复丢掉了 `node_modules` | 同上。`loaded (Redis state)` **不能**证明 `import('redis')` 已成功 |
 | 日志 `Cannot find module 'jpeg-js'`（Require stack 含 `image-embed.mjs`）；`listening` 只有 wecom 插件 | 2026-09-08 桥接增加图片压缩依赖后，现网 `node_modules` 未重装 | 企微能聊、`oa_workflow` 未注册。按第 4.2 节重装桥接（核对 `jpeg-js` / `pngjs`），Gateway `down && up`。不要先当模型或企微故障 |
 | Redis init failed（无 `Cannot find package`） | URL 错误、Redis 未启动、网络不通 | 检查 `OA_REDIS_URL`、`redis-cli PING`；包已装时恢复后重试即可，不必为「第一次失败」重启 Gateway |
-| docker logs 出现 `smartsheet_get_records` / `wecom_mcp` | `~/aidy` 的 `alsoAllow` 被旧配置覆盖，或 workspace 仍是旧智能表格规则 | 与缺 `redis` 包是两件事。现网规则包已禁该工具。核对见 `../WeCom 通道插件接入手册.md` 9.2。errcode `851014` 不要当成 OA 故障 |
+| docker logs 出现 `smartsheet_get_records` / `wecom_mcp` | `~/xa` 的 `alsoAllow` 被旧配置覆盖，或 workspace 仍是旧智能表格规则 | 与缺 `redis` 包是两件事。现网规则包已禁该工具。核对见 `../WeCom 通道插件接入手册.md` 9.2。errcode `851014` 不要当成 OA 故障 |
 | 日志里主机是 `127.0.0.1` | 仍在用 `bridge-config.json` 兜底，entrypoint 未注入 | 第 5.5.2.3 节；容器内不要用 `127.0.0.1` |
 | `NOAUTH` / `WRONGPASS` | Gateway 与 Redis 两边密码不一致 | 见 `../Redis 独立实例部署手册.md` 密码分边 |
 | 预检 `REDIS_UNAVAILABLE` | 容器内连不上 Redis，或 PING 失败 | 查 `OA_REDIS_URL`、独立 Redis 是否在跑、是否误用 `127.0.0.1` |
@@ -1330,7 +1330,7 @@ redis-cli -u "$OA_REDIS_URL" GET 'oa-workflow-bridge:idx:confirmation:OA-MXXXXX-
 | `docker exec` 里 `OA_REDIS_URL` 为空 | exec 不跑 entrypoint | 查主进程 environ（第 5.5.2.3 节），不要据此判失败 |
 | `Command 'npm' not found`（宿主） | WSL / Linux 服务器默认没有 Node | **不要** `apt install npm`。按第 4.2 节用官方镜像安装 |
 | `Cannot find package 'redis'` / `Cannot find module 'jpeg-js'` / 插件加载失败 | 未装依赖，或 `node_modules` 被清 / 备份未含；或只装了桥接没装适配器；或只装了旧的 `redis`、未装 `jpeg-js` / `pngjs` | 按第 4.2 节给**两包**重装后再 `down && up` |
-| npm `EACCES` / Permission denied | 挂载目录不是 uid 1000 可写 | 先 `sudo chown -R 1000:1000 ~/aidy/extensions` 再跑 4.2 |
+| npm `EACCES` / Permission denied | 挂载目录不是 uid 1000 可写 | 先 `sudo chown -R 1000:1000 ~/xa/extensions` 再跑 4.2 |
 | `compose ps` 的 IMAGE 是 `ghcr.io/openclaw/openclaw:2026.9.2` 或 `:latest`，手册命令却在拉 `openclaw/openclaw:latest` | 本机没有 Hub 名；Docker 按仓库名匹配 | 用第 4.2 节与 **IMAGE 列同名**的那一段，不要 `docker pull openclaw/openclaw:latest`；或先 `docker tag` 再走「Hub 名」 |
 | `docker images` 没有 `openclaw/openclaw` | Gateway 用的是 GHCR 名（方案 A 未 tag，或 yml 已写 ghcr） | 不是缺镜像。按第 4.2 节「GHCR 名」安装 |
 
@@ -1362,7 +1362,7 @@ redis-cli -u "$OA_REDIS_URL" GET 'oa-workflow-bridge:idx:confirmation:OA-MXXXXX-
 - 不要只在宿主机写 `wecom_identity_*.txt` 却不改 compose / entrypoint（会 `OA_IDENTITY_NOT_CONFIGURED`）
 - 不要用安装手册里尚无 `WECOM_IDENTITY_*` 的 entrypoint 整段覆盖已接 OA 的 `entrypoint.sh`（工位 6.4.2 / Linux 第 7 节第一份都会丢掉转换凭据）
 - 不要用 `docker logs | grep OA_IDENTITY` 判断没调 `prepare`（回执在会话 jsonl）
-- 不要把 `~/aidy/secrets/` 提交到 git
+- 不要把 `~/xa/secrets/` 提交到 git
 - 不要在 Gateway 容器内把 Redis 写成 `127.0.0.1`
 - 不要在 Docker 宿主用 `apt install npm` 或另装 Node 来装本插件依赖
 - 不要把 `npm install` 写进 `docker-compose.yml` 或 `entrypoint.sh`
@@ -1376,7 +1376,7 @@ redis-cli -u "$OA_REDIS_URL" GET 'oa-workflow-bridge:idx:confirmation:OA-MXXXXX-
 
 | 文档 | 内容 |
 | --- | --- |
-| `../Aidy 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
+| `../xA 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
 | [OA插件与Redis链路.md](OA插件与Redis链路.md) | 节点图、hop、五 action 点查哪些 key |
 | [工单会话隔离与资料回收场景.md](工单会话隔离与资料回收场景.md) | 同一人全局一张待确认；跨会话只能确认或取消；24h 回收 |
 | `企微到OA身份与数据流.md` | appid / 调用者 / 申请人、通道加密 userid、Redis `idmap` |

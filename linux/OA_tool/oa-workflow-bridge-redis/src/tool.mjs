@@ -576,7 +576,7 @@ export function createOAWorkflowToolFactory({ stateDir, stateStore, resolveState
 
   return (ctx) => ({
     name: "oa_workflow",
-    label: "Aidy OA 工单流程",
+    label: "xA OA 工单流程",
     description: "准备一次性OA工单确认、把员工陆续发来的图片/文件并入当前工单、由同一企微提交人确认后发起唯一流程、查询该人当前待确认/已提交记录或取消待确认。企微 inbound 图片/文件按当前 OpenClaw 会话暂存，不必传入本地路径。查进度可不传 confirmationId：可确认的待确认返回 PERSON_STATUS；对账中（unknown/submitting）顶层返回 RECONCILIATION_REQUIRED，不要当成待确认。不支持按 OA 工单号查询具体进度。待确认默认保留 24 小时，未确认或取消则自动清除图片、文档和描述。跨会话只能确认或取消，不能补附件。不要传入工单号；内部幂等号由插件生成。不能传入URL、凭据、流程ID或OA字段名。回执 hintZh 是给员工看的短句：无对应确认卡/提交成功模板时原样输出，不要贴英文 message。",
     parameters: {
       type: "object",

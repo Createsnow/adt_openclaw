@@ -1,6 +1,6 @@
-# Aidy OpenClaw（Linux / Docker）
+# xA OpenClaw（Linux / Docker）
 
-本仓库是 Aidy IT 服务台在 **Linux 容器**上的完整工程包：Gateway 部署文档、现网配置样例、工作区规则、OA 桥接与身份适配器源码。安装、运维、契约都以本仓库为准，**不依赖** Windows 原生交接包或其它外部文档目录。
+本仓库是 xA IT 服务台在 **Linux 容器**上的完整工程包：Gateway 部署文档、现网配置样例、工作区规则、OA 桥接与身份适配器源码。安装、运维、契约都以本仓库为准，**不依赖** Windows 原生交接包或其它外部文档目录。
 
 本仓库文档只描述 **Linux / Docker** 现网路径。每个主题只在一份正文里写全，其它文档用指针。
 
@@ -8,8 +8,8 @@
 
 | 你是谁 | 先打开 |
 | --- | --- |
-| 员工 / 业务 | [Aidy IT服务台使用说明书.html](Aidy%20IT服务台使用说明书.html)（浏览器打开：企微怎么报修、确认、取消） |
-| 看架构与全链路 | [Aidy 现网加固与演进全景.md](Aidy%20现网加固与演进全景.md) |
+| 员工 / 业务 | [xA IT服务台使用说明书.html](xA%20IT服务台使用说明书.html)（浏览器打开：企微怎么报修、确认、取消） |
+| 看架构与全链路 | [xA 现网加固与演进全景.md](xA%20现网加固与演进全景.md) |
 | 工位第一次安装 | [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) |
 | 服务器第一次安装 | [OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md) |
 | 装完之后的启停 / 备份 / 升级 | [OpenClaw Gateway Docker 运维手册.md](OpenClaw%20Gateway%20Docker%20运维手册.md) |
@@ -19,7 +19,7 @@
 ```text
 现网加固与演进全景 ──► 选型 ──► 安装手册（工位 WSL2 / Linux 服务器） ──► 运维手册
               │
-              ├── Aidy IT服务台使用说明书.html（员工 / 业务：企微怎么报修）
+              ├── xA IT服务台使用说明书.html（员工 / 业务：企微怎么报修）
               ├── WeCom 通道插件接入手册
               ├── DashScope 兼容 Provider 配置手册
               ├── openclaw.json 配置参考（查字段，不跟步骤）
@@ -32,8 +32,8 @@
                                         ├── 身份适配器说明
                                         ├── Ecology 流程创建 API 说明
                                         ├── 外部系统 Tool 插件设计规范
-                                        ├── Aidy 提示词规则优化说明
-                                        ├── Aidy企微回复模板
+                                        ├── xA 提示词规则优化说明
+                                        ├── xA企微回复模板
                                         └── 工单会话隔离与资料回收场景
 ```
 
@@ -64,12 +64,12 @@
 
 | 文档 | 何时读 | Canonical |
 | --- | --- | --- |
-| [Aidy IT服务台使用说明书.html](Aidy%20IT服务台使用说明书.html) | 员工 / 业务：浏览器打开 | 企微怎么报修、确认、取消、补附件 |
-| [Aidy 现网加固与演进全景.md](Aidy%20现网加固与演进全景.md) | 先看架构 | 架构、部署宿主（§4）、全链路、性能、痛点、演进；**§7 两条人事 HTTP 不要混** |
-| [OpenClaw Gateway 部署拓扑与选型.md](OpenClaw%20Gateway%20部署拓扑与选型.md) | 决定要不要第二套 Gateway | Docker vs CLI profile、多套 `~/aidy-*`、不要复制同一 Bot（附录 A） |
+| [xA IT服务台使用说明书.html](xA%20IT服务台使用说明书.html) | 员工 / 业务：浏览器打开 | 企微怎么报修、确认、取消、补附件 |
+| [xA 现网加固与演进全景.md](xA%20现网加固与演进全景.md) | 先看架构 | 架构、部署宿主（§4）、全链路、性能、痛点、演进；**§7 两条人事 HTTP 不要混** |
+| [OpenClaw Gateway 部署拓扑与选型.md](OpenClaw%20Gateway%20部署拓扑与选型.md) | 决定要不要第二套 Gateway | Docker vs CLI profile、多套 `~/xa-*`、不要复制同一 Bot（附录 A） |
 | `openclaw/MAPPING_RULES.md` | 改类型 / 系统关键词 | 人编匹配规则；运行时认已注入 `AGENTS.md`，Agent 禁止再 read |
-| [openclaw/Aidy 提示词规则优化说明.md](openclaw/Aidy%20提示词规则优化说明.md) | 改规则包或 `skipBootstrap` | 为何禁止热路径 `read`、类型白名单、`skipBootstrap` |
-| [openclaw/Aidy企微回复模板.md](openclaw/Aidy企微回复模板.md) | 改员工可见一句 | 企微正文全文；改一句必须同步 `AGENTS.md` |
+| [openclaw/xA 提示词规则优化说明.md](openclaw/xA%20提示词规则优化说明.md) | 改规则包或 `skipBootstrap` | 为何禁止热路径 `read`、类型白名单、`skipBootstrap` |
+| [openclaw/xA企微回复模板.md](openclaw/xA企微回复模板.md) | 改员工可见一句 | 企微正文全文；改一句必须同步 `AGENTS.md` |
 | [OA_tool/工单会话隔离与资料回收场景.md](OA_tool/工单会话隔离与资料回收场景.md) | 验收跨会话 | 同一人全局一张待确认；B 只能确认或取消；附件不串、24h 清资料 |
 | [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) | 工位第一次安装 | WSL2 / dockerd / 第一次 `compose up` |
 | [OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md) | 服务器第一次安装 | SmartX 虚机 / 分次 `compose up` |

@@ -1,7 +1,7 @@
 services:
-  aidy-gateway:
+  xa-gateway:
     image: ghcr.io/openclaw/openclaw:2026.9.2
-    container_name: aidy-gateway
+    container_name: xa-gateway
     user: "1000:1000"
     restart: unless-stopped
     logging:
@@ -48,10 +48,10 @@ services:
       retries: 5
       start_period: 40s
     networks:
-      - aidy-shared
+      - xa-shared
 
 networks:
-  aidy-shared:
+  xa-shared:
     external: true
 
 secrets:

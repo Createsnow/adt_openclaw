@@ -105,7 +105,7 @@ async function dropPendingLikeTtl(store, pending) {
 }
 
 async function prepareThenDropPending(t, ticketId) {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-ttl-gone-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-ttl-gone-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`ttl-gone-${Date.now()}-${ticketId.slice(-4)}`);
@@ -128,7 +128,7 @@ async function prepareThenDropPending(t, ticketId) {
 }
 
 test("本轮 inbound / ctx 有图时 prepare 自动暂存，模型不必传路径", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-auto-att-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-auto-att-"));
   t.after(() => {
     clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
@@ -177,7 +177,7 @@ test("本轮 inbound / ctx 有图时 prepare 自动暂存，模型不必传路�
 });
 
 test("prepare 跳过已不存在的 inbound 路径，仍暂存当前截图", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-skip-stale-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-skip-stale-"));
   t.after(() => {
     clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
@@ -208,7 +208,7 @@ test("prepare 跳过已不存在的 inbound 路径，仍暂存当前截图", asy
 });
 
 test("prepare 接受 workspace/media/inbound 通道原件，不静默丢掉", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-ws-in-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-ws-in-"));
   t.after(() => {
     clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
@@ -239,8 +239,8 @@ test("prepare 接受 workspace/media/inbound 通道原件，不静默丢掉", as
 });
 
 test("prepare 跳过其他目录的 inbound 形路径，仍暂存当前截图", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-skip-outside-"));
-  const otherRoot = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-other-in-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-skip-outside-"));
+  const otherRoot = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-other-in-"));
   t.after(() => {
     clearInboundMedia();
     return Promise.all([
@@ -277,7 +277,7 @@ test("prepare 跳过其他目录的 inbound 形路径，仍暂存当前截图", 
 });
 
 test("同一轮 ctx.mediaPaths 只在 prepare 暂存一次，submit 不重复", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-ctx-att-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-ctx-att-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   const inbound = path.join(stateDir, "media", "inbound");
   await mkdir(inbound, { recursive: true });
@@ -311,7 +311,7 @@ test("同一轮 ctx.mediaPaths 只在 prepare 暂存一次，submit 不重复", 
 });
 
 test("确认消息带新 inbound 会追加，prepare 已暂存的同一路径不重复", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-confirm-att-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-confirm-att-"));
   t.after(() => {
     clearInboundMedia();
     return rm(stateDir, { recursive: true, force: true });
@@ -355,7 +355,7 @@ test("确认消息带新 inbound 会追加，prepare 已暂存的同一路径不
 });
 
 test("只允许原企微会话一次确认并提交，追加附件不覆盖", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-tool-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-tool-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   const inbound = path.join(stateDir, "media", "inbound");
   await mkdir(inbound, { recursive: true });
@@ -421,7 +421,7 @@ test("只允许原企微会话一次确认并提交，追加附件不覆盖", as
   const description = capturedPayload.mainData.find((field) => field.fieldName === "wtxqmskftp").fieldValue;
   assert.match(description, /最终补充：无需继续补充/);
   assert.match(description, /alt="现场截图.png"/);
-  assert.doesNotMatch(description, /Aidy工单编号/);
+  assert.doesNotMatch(description, /xA工单编号/);
   assert.doesNotMatch(description, /IT-\d{8}-\d{6}-[A-Z0-9]{4}/);
 
   const repeated = parse(await tool.execute("call-5", { action: "submit_confirmed", confirmationId: prepared.confirmationId }));
@@ -432,7 +432,7 @@ test("只允许原企微会话一次确认并提交，追加附件不覆盖", as
 });
 
 test("桥接未激活时仍校验确认单，错误 confirmationId 不是 INACTIVE", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-inactive-validate-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-inactive-validate-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const factory = createOAWorkflowToolFactory({
@@ -453,7 +453,7 @@ test("桥接未激活时仍校验确认单，错误 confirmationId 不是 INACTI
 });
 
 test("桥接未激活时确认不会调用OA", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-inactive-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-inactive-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   let createCount = 0;
@@ -470,7 +470,7 @@ test("桥接未激活时确认不会调用OA", async (t) => {
 });
 
 test("过期后不能提交，cancel 也是 CONFIRMATION_EXPIRED", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-expire-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-expire-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`expire-${Date.now()}`);
@@ -509,7 +509,7 @@ test("过期后不能提交，cancel 也是 CONFIRMATION_EXPIRED", async (t) => 
 });
 
 test("pending 仍在但已过期时 cancel 返回 CONFIRMATION_EXPIRED，不标 cancelled", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-cancel-expire-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-cancel-expire-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`cancel-expire-${Date.now()}`);
@@ -539,7 +539,7 @@ test("pending 仍在但已过期时 cancel 返回 CONFIRMATION_EXPIRED，不标 
 });
 
 test("status 对过期 pending 返回 CONFIRMATION_EXPIRED，并清理 staging", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-status-expire-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-status-expire-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   const inbound = path.join(stateDir, "media", "inbound");
   await mkdir(inbound, { recursive: true });
@@ -611,7 +611,7 @@ test("pending 被 TTL 回收后 cancel 返回 CONFIRMATION_EXPIRED", async (t) =
 });
 
 test("status 对 unknown pending 返回 RECONCILIATION_REQUIRED，不报待确认", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-status-unknown-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-status-unknown-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`status-unknown-${Date.now()}`);
@@ -646,7 +646,7 @@ test("status 对 unknown pending 返回 RECONCILIATION_REQUIRED，不报待确�
 });
 
 test("确认时本地 staging 丢失则明确报错，不调 OA，仍可取消", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-staging-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-staging-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   const inbound = path.join(stateDir, "media", "inbound");
   await mkdir(inbound, { recursive: true });
@@ -679,7 +679,7 @@ test("确认时本地 staging 丢失则明确报错，不调 OA，仍可取消",
 });
 
 test("申请人资料查不到则不调 OA，pending 退回待确认", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-profile-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-profile-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`profile-${Date.now()}`);
@@ -709,7 +709,7 @@ test("申请人资料查不到则不调 OA，pending 退回待确认", async (t)
 });
 
 test("同一工单号取消后再 prepare，旧 confirmationId 的 status 不串到新单", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-reuse-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-reuse-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`reuse-${Date.now()}`);
@@ -741,7 +741,7 @@ test("同一工单号取消后再 prepare，旧 confirmationId 的 status 不串
 });
 
 test("adapter=off 且未映射时仍返回 OA_IDENTITY_MAPPING_REQUIRED", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-mapoff-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-mapoff-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const factory = createOAWorkflowToolFactory({
@@ -760,7 +760,7 @@ test("adapter=off 且未映射时仍返回 OA_IDENTITY_MAPPING_REQUIRED", async 
 });
 
 test("adapter=on 时 fake resolve 返回数字 id 后 prepare 写 Redis", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-adapon-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-adapon-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`adapon-${Date.now()}`);
@@ -785,7 +785,7 @@ test("adapter=on 时 fake resolve 返回数字 id 后 prepare 写 Redis", async 
 });
 
 test("adapter=on 且 ALIGN_MISMATCH 时不写 pending", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-align-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-align-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`align-${Date.now()}`);
@@ -813,7 +813,7 @@ test("adapter=on 且 ALIGN_MISMATCH 时不写 pending", async (t) => {
 });
 
 test("identity.adapter 省略时默认走适配器", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-adadef-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-adadef-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`adadef-${Date.now()}`);
@@ -837,7 +837,7 @@ test("identity.adapter 省略时默认走适配器", async (t) => {
 });
 
 test("identity.adapter 省略且无适配器时返回 OA_IDENTITY_NOT_FOUND", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-adanone-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-adanone-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const result = parse(await createOAWorkflowToolFactory({
@@ -855,7 +855,7 @@ test("identity.adapter 省略且无适配器时返回 OA_IDENTITY_NOT_FOUND", as
 });
 
 test("prepare 不要求模型传工单号，且忽略模型传入的非法或自编编号", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-alloc-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-alloc-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const factory = createOAWorkflowToolFactory({
@@ -897,7 +897,7 @@ test("prepare 不要求模型传工单号，且忽略模型传入的非法或自
 });
 
 test("prepare 类型与系统不匹配时带可行动 hintZh，不是泛化请稍后重试", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-system-hint-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-system-hint-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const factory = createOAWorkflowToolFactory({
@@ -916,7 +916,7 @@ test("prepare 类型与系统不匹配时带可行动 hintZh，不是泛化请�
 });
 
 test("OA 明确拒绝 PARAM_ERROR 带回执 hintZh，禁止模型只看到英文", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-param-hint-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-param-hint-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const factory = createOAWorkflowToolFactory({
@@ -939,7 +939,7 @@ test("OA 明确拒绝 PARAM_ERROR 带回执 hintZh，禁止模型只看到英文
 });
 
 test("OA 明确拒绝后结束确认单：查进度不再待确认，同号不能再交，可开新单", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-param-close-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-param-close-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`param-close-${Date.now()}`);
@@ -993,7 +993,7 @@ test("OA 明确拒绝后结束确认单：查进度不再待确认，同号不�
 });
 
 test("OA 已成功后 Redis 写 submitted 失败时不改判 failed，重提不调 OA", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-c1-persist-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-c1-persist-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`c1-persist-${Date.now()}`);
@@ -1036,7 +1036,7 @@ test("OA 已成功后 Redis 写 submitted 失败时不改判 failed，重提不�
 });
 
 test("OA 已成功且 Redis 已写 submitted 后，staging 清理失败仍返回 SUBMITTED", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-c1-staging-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-c1-staging-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`c1-staging-${Date.now()}`);
@@ -1081,7 +1081,7 @@ test("OA 已成功且 Redis 已写 submitted 后，staging 清理失败仍返回
 });
 
 test("Redis 断连记 REDIS_UNAVAILABLE 而不是 VALIDATION_ERROR", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-down-hint-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-down-hint-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const stateStore = createMemoryStateStore(`redis-down-${Date.now()}`);
@@ -1101,7 +1101,7 @@ test("Redis 断连记 REDIS_UNAVAILABLE 而不是 VALIDATION_ERROR", async (t) =
 });
 
 test("cancel 缺 confirmationId 返回 MISSING_CONFIRMATION_ID 与中文 hintZh", async (t) => {
-  const stateDir = await mkdtemp(path.join(os.tmpdir(), "aidy-oa-redis-missing-id-"));
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "xa-oa-redis-missing-id-"));
   t.after(() => rm(stateDir, { recursive: true, force: true }));
   await mkdir(path.join(stateDir, "media", "inbound"), { recursive: true });
   const factory = createOAWorkflowToolFactory({

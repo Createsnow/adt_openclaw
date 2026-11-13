@@ -65,7 +65,7 @@ test("运维支持映射到已批准的OA字段和选项值", () => {
   );
   const description = payload.mainData.find((field) => field.fieldName === "wtxqmskftp").fieldValue;
   assert.match(description, /最终补充：无需补充，确认提交/);
-  assert.doesNotMatch(description, /Aidy工单编号/);
+  assert.doesNotMatch(description, /xA工单编号/);
   assert.doesNotMatch(description, /IT-20260805-120000-AB12/);
   assert.equal(payload.mainData.find((field) => field.fieldName === "clry").fieldValue, "18196,10251");
   assert.equal(payload.requestName, "[IT-20260805-120000-AB12] 生产线MES无法登录");

@@ -1,17 +1,17 @@
 #!/bin/sh
 set -eu
 
-# 宿主机 cron 用：清 ~/aidy 布局下满 24 小时的 inbound 原件。
+# 宿主机 cron 用：清 ~/xa 布局下满 24 小时的 inbound 原件。
 # 对应 compose 卷：./config → /home/node/.openclaw ，./workspace → .../workspace
-# 因此这里是 $HOME/aidy/config/media/inbound 与 $HOME/aidy/workspace/media/inbound
+# 因此这里是 $HOME/xa/config/media/inbound 与 $HOME/xa/workspace/media/inbound
 # （不是容器内路径）。写入 crontab 见运维手册 10.4 / 10.4.1。
 
-LOG="${HOME}/aidy/logs/inbound-prune.log"
-LOCK="${HOME}/aidy/logs/inbound-prune.lock"
+LOG="${HOME}/xa/logs/inbound-prune.log"
+LOCK="${HOME}/xa/logs/inbound-prune.lock"
 
 DIRS="
-${HOME}/aidy/config/media/inbound
-${HOME}/aidy/workspace/media/inbound
+${HOME}/xa/config/media/inbound
+${HOME}/xa/workspace/media/inbound
 "
 
 ts() { TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S'; }

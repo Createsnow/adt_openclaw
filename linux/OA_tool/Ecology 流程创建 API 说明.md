@@ -2,7 +2,7 @@
 
 > 本文档由仓库原文档**重组**而来：只调整章节归属与交叉引用，**不改变**部署步骤、命令、YAML、错误码或禁止事项。阅读顺序见 [README.md](../README.md)。
 
-上游 Ecology HTTP 步骤如下。插件侧字段映射、`otherParams` 现网值与成功判定见 [OA Workflow Bridge（Redis）接入手册.md](OA Workflow Bridge（Redis）接入手册.md) 第 7 节。Aidy 建单与 `bridge-config.json` 的 `isnextflow` 对齐：现网 `"0"`（创建成功但不自动流转）；**不要**写 `Content-Length: 0`（会把 JSON 请求体裁成空）。
+上游 Ecology HTTP 步骤如下。插件侧字段映射、`otherParams` 现网值与成功判定见 [OA Workflow Bridge（Redis）接入手册.md](OA Workflow Bridge（Redis）接入手册.md) 第 7 节。xA 建单与 `bridge-config.json` 的 `isnextflow` 对齐：现网 `"0"`（创建成功但不自动流转）；**不要**写 `Content-Length: 0`（会把 JSON 请求体裁成空）。
 
 ---
 
@@ -10,7 +10,7 @@
 
 使用 RSA 公钥对 `userid` 和 `secret` 分别加密，得到加密后的密钥和用户标识。
 
-**Aidy：** `applytoken` **只**加密 `secret`，请求不带 userid。创建流程时加密的 `userid` 是**申请人**人员 id（与 `xqsqr` 同一人），不是下面示例的 `1101`。公钥以现网 `bridge-config.json` 的 `publicKeySpkiBase64` 为准，不要抄本文示例 `spk`。
+**xA：** `applytoken` **只**加密 `secret`，请求不带 userid。创建流程时加密的 `userid` 是**申请人**人员 id（与 `xqsqr` 同一人），不是下面示例的 `1101`。公钥以现网 `bridge-config.json` 的 `publicKeySpkiBase64` 为准，不要抄本文示例 `spk`。
 
 ### 原始参数
 
@@ -106,14 +106,14 @@ String useridEncry = rsa.encrypt(null, userid, null, "utf-8", spk, false);
 |--------|------|------|------|
 | `token` | 是 | string | 第二步返回的 token 信息（默认30 分钟内有效） |
 | `appid` | 是 | string | 许可证号码：以 `bridge-config.json` 的 `appId` 为准（仓库样例 `2026-09-01-lijinjin`） |
-| `userid` | 是 | string | Aidy 建单：RSA 加密后的**申请人**人员 id（与 `xqsqr` 同一人）。不要用接口账号人员 id，否则单据落到接口账号头上。只读预检 `getCreateWorkflowList` 仍用接口账号 |
+| `userid` | 是 | string | xA 建单：RSA 加密后的**申请人**人员 id（与 `xqsqr` 同一人）。不要用接口账号人员 id，否则单据落到接口账号头上。只读预检 `getCreateWorkflowList` 仍用接口账号 |
 | `Content-Type` | 是 | string | `application/json` |
 
-不要手写 `Content-Length: 0`。有 JSON Body 时由客户端按实际字节计算；写成 `0` 等于无请求体，流程创建会失败或落到空单。Aidy 插件 `oa-client.mjs` **不**设置该 Header。`applytoken` 仍无 userid；`doCreateRequest` 的 Header `userid` 由 `encryptCredential(pending.oaRequesterId)` 生成。
+不要手写 `Content-Length: 0`。有 JSON Body 时由客户端按实际字节计算；写成 `0` 等于无请求体，流程创建会失败或落到空单。xA 插件 `oa-client.mjs` **不**设置该 Header。`applytoken` 仍无 userid；`doCreateRequest` 的 Header `userid` 由 `encryptCredential(pending.oaRequesterId)` 生成。
 
 ### 请求体（Body）示例
 
-Aidy 插件实际发送的 `otherParams` 如下（`isnextflow` 取自 `bridge-config.json`，现网 `"0"`：建单成功但不自动流转，停在申请人节点。这是生产测试开关，不是草稿；项目可用后改成 `"1"` 并重启 Gateway。不要把现网 `"0"` 理解成建单失败）。
+xA 插件实际发送的 `otherParams` 如下（`isnextflow` 取自 `bridge-config.json`，现网 `"0"`：建单成功但不自动流转，停在申请人节点。这是生产测试开关，不是草稿；项目可用后改成 `"1"` 并重启 Gateway。不要把现网 `"0"` 理解成建单失败）。
 
 ```json
 {
@@ -177,10 +177,10 @@ Aidy 插件实际发送的 `otherParams` 如下（`isnextflow` 取自 `bridge-co
 | 参数名 | 类型 | 说明 |
 |--------|------|------|
 | `isnextflow` | String | 取自 `bridge-config.json`，只允许 `"0"` / `"1"`。现网 `"0"`：建单成功但不自动流转，停在申请人节点。`"1"` 为建单后自动流转（目标口径）。处理人仍须写 `clry` |
-| `delReqFlowFaild` | String | Aidy 固定 `"1"` |
-| `isVerifyPer` | String | Aidy 固定 `"1"` |
+| `delReqFlowFaild` | String | xA 固定 `"1"` |
+| `isVerifyPer` | String | xA 固定 `"1"` |
 
-官方 `clry` **始终必填**，值为附录对应负责人 id（多人逗号分隔、无空格）。Aidy 由插件按 `systemName` 写入 `system-handlers.json`，模型不要传人员 id。现网 `isnextflow` 为 `"0"`（见 `bridge-config.json`）。不要抄官方示例的 `Content-Length: 0`。
+官方 `clry` **始终必填**，值为附录对应负责人 id（多人逗号分隔、无空格）。xA 由插件按 `systemName` 写入 `system-handlers.json`，模型不要传人员 id。现网 `isnextflow` 为 `"0"`（见 `bridge-config.json`）。不要抄官方示例的 `Content-Length: 0`。
 
 #### mainData 字段说明
 
@@ -198,9 +198,9 @@ Aidy 插件实际发送的 `otherParams` 如下（`isnextflow` 取自 `bridge-co
 | `szxtxq` | 所属系统（需求）（取值见下方对照表） | `"2"` | 申请类型为 **IT 需求** 时必填 |
 | `xqlx1` | 需求类型：`0`流程新建、`1`流程优化、`2`数据处理、`3`集成对接 | `"2"` | 申请类型为 **IT 需求** 时必填 |
 | `yjygsh` | 月节约工时（H） | `"8"` | 申请类型为 **IT 需求** 时必填 |
-| `wtxqmskftp` | 问题/需求描述（可附图片） | 纯文本，或文本后嵌 `<img src="data:image/jpeg;base64,…" />` | 始终必填。Aidy：先写问题文字（再拼影响范围 / 发生时间 / 已尝试措施 / 最终补充）。inbound **图片**先压缩为 JPEG 再转 base64，以 data URI 嵌在文字后。**不**写 Aidy 工单号 |
-| `scfj` | 需求文档附件 | HTTP `fieldValue` 为 **JSON 字符串**，内容是数组：`"[{\"filePath\":\"base64:<裸base64>\",\"fileName\":\"含扩展名的文件名\"}]"` | 非必填。只写 **文档**（pdf / office / txt 等），不写图片。有文档才写。OA 开发确认字段内容是数组类型；`doCreateRequest` 的 `mainData.fieldValue` 一律是字符串，所以必须 `JSON.stringify` 后再放入。`filePath` 须带 Ecology 附件前缀 `base64:`，不要发 native 数组或裸 base64（现网均 `PARAM_ERROR`）。Aidy：`attachmentFieldName=scfj`，`filePath` 为 `base64:` + staging 转出的裸 base64，不传外链；该配置为空时**带文档**必须拒绝，不能只留「原件见企微」后报成功。仅有图片、无文档时不写 `scfj` |
-| `clry` | 处理人员 | `"13437"` | 始终必填。值为附录对应负责人 id，多人逗号分隔。Aidy 由插件按所属系统写入，模型不传 |
+| `wtxqmskftp` | 问题/需求描述（可附图片） | 纯文本，或文本后嵌 `<img src="data:image/jpeg;base64,…" />` | 始终必填。xA：先写问题文字（再拼影响范围 / 发生时间 / 已尝试措施 / 最终补充）。inbound **图片**先压缩为 JPEG 再转 base64，以 data URI 嵌在文字后。**不**写 xA 工单号 |
+| `scfj` | 需求文档附件 | HTTP `fieldValue` 为 **JSON 字符串**，内容是数组：`"[{\"filePath\":\"base64:<裸base64>\",\"fileName\":\"含扩展名的文件名\"}]"` | 非必填。只写 **文档**（pdf / office / txt 等），不写图片。有文档才写。OA 开发确认字段内容是数组类型；`doCreateRequest` 的 `mainData.fieldValue` 一律是字符串，所以必须 `JSON.stringify` 后再放入。`filePath` 须带 Ecology 附件前缀 `base64:`，不要发 native 数组或裸 base64（现网均 `PARAM_ERROR`）。xA：`attachmentFieldName=scfj`，`filePath` 为 `base64:` + staging 转出的裸 base64，不传外链；该配置为空时**带文档**必须拒绝，不能只留「原件见企微」后报成功。仅有图片、无文档时不写 `scfj` |
+| `clry` | 处理人员 | `"13437"` | 始终必填。值为附录对应负责人 id，多人逗号分隔。xA 由插件按所属系统写入，模型不传 |
 
 有文档时 `mainData` 追加一条 `scfj`。OA 开发确认该字段**内容**是 `[{"filePath":"base64:<裸base64>","fileName":"含扩展名"}]` 数组；HTTP 上 `fieldValue` 必须写成该数组的 JSON 字符串，与其它 `mainData` 字段一样都是 string。`filePath` 必须带 `base64:` 前缀。不要发 native 数组或裸 base64。图片走 `wtxqmskftp` 内嵌，不要抄 OA 示例里的外链图，也不要把 png/jpg 放进 `scfj`。
 
@@ -233,11 +233,11 @@ Aidy 插件实际发送的 `otherParams` 如下（`isnextflow` 取自 `bridge-co
 | 23 | MES系统（越南C部） | 庞立亮、阮名孟、范文南、新文雄、绍氏欣 | 18196,27697,27507,27338,9777 |
 | 24 | 法大大电子签平台 | 邹茜茜 | 9673 |
 
-OA 选项编号从 21 跳到 23，没有 22。Aidy 的 `systemName` 必须与 `system-options.json` 名称一致（含括号，无「OA 系统」那种空格）：`邮箱系统（国内）`、`文件管理系统（国内）`、`MES系统（越南B部）`。`clry` 写入 `system-handlers.json` 中的负责人 id，不是状态卡上的姓名。
+OA 选项编号从 21 跳到 23，没有 22。xA 的 `systemName` 必须与 `system-options.json` 名称一致（含括号，无「OA 系统」那种空格）：`邮箱系统（国内）`、`文件管理系统（国内）`、`MES系统（越南B部）`。`clry` 写入 `system-handlers.json` 中的负责人 id，不是状态卡上的姓名。
 
 ## 第四步：两条人事接口（不要混）
 
-生产有两次调 OA 人事，**不是同一个接口**。对照只在这里写全 HTTP；链路位置见 [../Aidy 现网加固与演进全景.md](../Aidy%20现网加固与演进全景.md) 第 7 节。
+生产有两次调 OA 人事，**不是同一个接口**。对照只在这里写全 HTTP；链路位置见 [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) 第 7 节。
 
 | | 身份点查（适配器，`prepare` miss） | 提交前资料（桥接，`submit_confirmed`） |
 | --- | --- | --- |
