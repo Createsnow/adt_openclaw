@@ -33,7 +33,7 @@ xA Agent（workspace-rules + oa_workflow）
 - 企微**不是** Telegram 那种内置通道，不能在没有插件时单独写 `channels.wecom`。
 - 同一套 BotId/BotSecret 只能被一个 Gateway 持有（单账号模式）。
 - 本仓库**不含** `wecom-openclaw-plugin` 源码，需按第 5 节从 npm catalog 安装，或从已有环境拷贝。
-- 入站发送人是 `body.from.userid` → `SenderId` / `requesterSenderId`。现网智能机器人为 **加密 userid**（`wo` 开头），不是工号。身份如何进 OA 见 `OA_tool/企微到OA身份与数据流.md`（Redis `idmap`）。把加密串转明文 **不在本通道插件内**，见 `OA_tool/wecom-oa-identity-adapter` 与 `OA_tool/身份适配器说明.md`（已验证）。不要在本手册重复映射步骤。
+- 入站发送人是 `body.from.userid` → `SenderId` / `requesterSenderId`。现网智能机器人为 **加密 userid**（`wo` 开头），不是工号。身份如何进 OA 见 `OA_tool/企微到OA身份与数据流.md`（`oa_identity` 缓存）。把加密串转明文 **不在本通道插件内**，见 OA 桥接内 `src/identity/` 与 `OA_tool/身份适配器说明.md`（已验证）。不要在本手册重复映射步骤。
 
 ---
 
@@ -181,7 +181,7 @@ Plugin install failed: wecom-openclaw-plugin is disabled (blocked by allowlist).
 ### 6.1 用 openclaw 命令修改
 
 ```bash
-oc config set plugins.allow '["oa-workflow-bridge-redis","wecom-openclaw-plugin"]'
+oc config set plugins.allow '["oa-workflow-bridge","wecom-openclaw-plugin"]'
 oc config validate
 ```
 
@@ -197,16 +197,16 @@ oc plugins list
 ```json
 "plugins": {
   "allow": [
-    "oa-workflow-bridge-redis",
+    "oa-workflow-bridge",
     "wecom-openclaw-plugin"
   ],
   "load": {
     "paths": [
-      "/home/node/.openclaw/extensions/oa-workflow-bridge-redis"
+      "/home/node/.openclaw/extensions/oa-workflow-bridge"
     ]
   },
   "entries": {
-    "oa-workflow-bridge-redis": {
+    "oa-workflow-bridge": {
       "enabled": true,
       "hooks": { "allowConversationAccess": true }
     },
@@ -218,7 +218,7 @@ oc plugins list
 }
 ```
 
-npm 托管安装的 wecom 插件无需出现在 `load.paths` 中。`wecom-openclaw-plugin` 也须 `hooks.allowConversationAccess: true`，否则启动日志会 `before_prompt_build` blocked，带图提单只靠 OA 桥接的 hook 缓冲（见 OA Redis 接入手册 3.6）。
+npm 托管安装的 wecom 插件无需出现在 `load.paths` 中。`wecom-openclaw-plugin` 也须 `hooks.allowConversationAccess: true`，否则启动日志会 `before_prompt_build` blocked，带图提单只靠 OA 桥接的 hook 缓冲（见 OA 桥接接入手册 3.6）。
 
 ---
 
@@ -438,7 +438,7 @@ xA **OA 主路径不再调用** `wecom_mcp`（不读不写智能表格）。`too
 ]
 ```
 
-不要加入 `read` / `write` / `edit` / `memory_search` / `memory_get` / `message` / `wecom_mcp`。工单正文由模型直接输出，通道负责发出；幂等看 Redis。inbound 由插件自动暂存，不要用 `read` 看附件。`oa_workflow` 由 OA 桥接插件注册，不是企微插件工具。完整 json 见 `openclaw.json 配置参考.md` 第 15 节。企微通道插件仍可注册 `wecom_mcp`，但不要加入 xA 的 `alsoAllow`。
+不要加入 `read` / `write` / `edit` / `memory_search` / `memory_get` / `message` / `wecom_mcp`。工单正文由模型直接输出，通道负责发出；幂等看插件数据库。inbound 由插件自动暂存，不要用 `read` 看附件。`oa_workflow` 由 OA 桥接插件注册，不是企微插件工具。完整 json 见 `openclaw.json 配置参考.md` 第 15 节。企微通道插件仍可注册 `wecom_mcp`，但不要加入 xA 的 `alsoAllow`。
 
 **去掉 `wecom_mcp` 不会让企业微信插件失效。** 通道（收发、WebSocket）靠 `plugins.allow` + `entries` enabled + `channels.wecom`；`alsoAllow` 只决定模型能不能点名调用工具。插件加载后仍会提供 `wecomcli-*` 等 **Skill 目录**（进 system prompt，不是工具）。xA 还要 `agents.defaults.skills: []`，否则 `/context detail` 仍会列出智能表格、文档等 skill。插件 vs 工具 vs Skill 见 `openclaw.json 配置参考.md` 第 5.5 / 11.3 节。
 
@@ -447,10 +447,10 @@ xA **OA 主路径不再调用** `wecom_mcp`（不读不写智能表格）。`too
 核对（改的是 `~/xa/`，改完须重启 Gateway）：
 
 1. `~/xa/config/openclaw.json`：全局与 `itservicedeskagent` 的 `tools.alsoAllow` 仅含 `oa_workflow`，**不含** `read` / `wecom_mcp` / `write` / `edit` / `memory_*` / `message`，也不含 `"wecom-openclaw-plugin"`。Agent 级 `deny` 含 `group:fs`。`agents.defaults.skipBootstrap` 为 `true`。`agents.defaults.skills` 为 `[]`（不要只靠 `skills.entries.*.enabled: false`）。
-2. `~/xa/workspace/`：已换成现规则包（注入 `AGENTS.md`，含 `## Tools`）。`MAPPING_RULES.md` 只是人编副本，在仓库 `openclaw/`，Agent **禁止 read**。OpenClaw 2026.9.2 不再注入 `TOOLS.md`。
+2. `~/xa/workspace/`：已换成现规则包（注入 `AGENTS.md`，含 `## Tools`）。规则只有这一份 `AGENTS.md`（人编副本已删除）。OpenClaw 2026.9.2 不再注入 `TOOLS.md`。
 3. 新开会话跑 `/context detail`：`Skills list` 应为 0，不应再出现 `wecomcli-smartsheet`。旧会话可能缓存 skill 快照。
 
-装 `redis` 包见 `OA_tool/OA Workflow Bridge（Redis）接入手册.md` 4.2 / 11。切入范围见 `xA 现网加固与演进全景.md` 1.1。
+装插件依赖见 `OA_tool/OA Workflow Bridge 接入手册.md` 4.2 / 10。切入范围见 `xA 现网加固与演进全景.md` 1.1。
 
 若需启用插件注册的全部企微业务工具，可额外加入 `"wecom-openclaw-plugin"`（见插件 README）。这与当前 OA 切流规则冲突，不要为 xA IT 服务台打开。
 
@@ -602,16 +602,16 @@ Gateway Up、插件 npm 安装成功后的典型片段。**现网仓库样例**�
   },
   "plugins": {
     "allow": [
-      "oa-workflow-bridge-redis",
+      "oa-workflow-bridge",
       "wecom-openclaw-plugin"
     ],
     "load": {
       "paths": [
-        "/home/node/.openclaw/extensions/oa-workflow-bridge-redis"
+        "/home/node/.openclaw/extensions/oa-workflow-bridge"
       ]
     },
     "entries": {
-      "oa-workflow-bridge-redis": { "enabled": true, "hooks": { "allowConversationAccess": true } },
+      "oa-workflow-bridge": { "enabled": true, "hooks": { "allowConversationAccess": true } },
       "wecom-openclaw-plugin": { "enabled": true, "hooks": { "allowConversationAccess": true } }
     }
   }
@@ -713,9 +713,9 @@ oc channels status --channel wecom
 | `OpenClaw Gateway Docker 运维手册.md` | 日常巡检、日志 grep、睡眠后重连、升级回滚 |
 | `第三方凭据注入与配置中心演进.md` | 第三方参数 Docker 注入 → Nacos 迁移 |
 | `DashScope 兼容 Provider 配置手册.md` | 关掉 qwen3.8-max 隐藏思考（与 7.4 占位配合）；企微通后模型回归 |
-| `外部系统 Tool 插件设计规范.md` | OA 插件形式（Redis 版 `oa_workflow`） |
+| `外部系统 Tool 插件设计规范.md` | OA 插件形式（`oa_workflow`） |
 | `xA 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
-| `OA_tool/企微到OA身份与数据流.md` | `from.userid`、Redis `idmap`、通道回传字段 |
+| `OA_tool/企微到OA身份与数据流.md` | `from.userid`、`oa_identity` 缓存、通道回传字段 |
 | `OA_tool/身份适配器说明.md` | 转换层（独立适配器已验证；不在本通道插件内） |
 | `第三方凭据注入与配置中心演进.md` | 凭据与安全边界 |
 | [OpenClaw WeCom 官方文档](https://docs.openclaw.ai/channels/wecom) | catalog 安装的是 exact version |

@@ -4,28 +4,28 @@
 
 适用对象：需要在 OpenClaw Gateway 上以 **插件** 形式接入外部系统（当前以 OA 工单桥接为完整范例）的工程师。
 
-本文说明 **插件应该长什么样**（固定 action、可信上下文、两阶段确认、凭据不进配置明文）。OA 工单桥接的实现与部署只维护 **Redis 版**：
+本文说明 **插件应该长什么样**（固定 action、可信上下文、两阶段确认、凭据不进配置明文）。OA 工单桥接的实现与部署只维护一套：MySQL 版。
 
 | 项 | 值 |
 | --- | --- |
-| 插件 id / 目录 | `oa-workflow-bridge-redis` |
-| 状态存储 | Redis（pending / ledger，单 Gateway 点查） |
-| 部署文档 | `OA_tool/OA Workflow Bridge（Redis）接入手册.md` |
-| Redis 服务 | `Redis 独立实例部署手册.md` |
+| 插件 id / 目录 | `oa-workflow-bridge` |
+| 状态存储 | 独立 MySQL（`oa_ticket` / `oa_inbox` / `oa_identity`，单 Gateway） |
+| 部署文档 | `OA_tool/OA Workflow Bridge 接入手册.md` |
+| 数据库 | `MySQL 数据库准备.md` |
 
-`plugins.allow` 只写 `oa-workflow-bridge-redis`。不要再加载旧 id `oa-workflow-bridge`（本地 `state.json` 方案已废弃）。
+`plugins.allow` 只写 `oa-workflow-bridge`。不要再加载旧 id `oa-workflow-bridge-redis` 或旧的独立身份适配器包。
 
 ---
 
 ## 1. 插件形式的核心原则
 
-这些原则以 OA Redis 版为范例，也适用于以后接入的其它外部系统。
+这些原则以 OA 桥接为范例，也适用于以后接入的其它外部系统。
 
 **插件 ≠ 工具。** 插件是 Gateway 加载的包；工具是模型可点名调用的函数。一个插件可以只登记通道、只登记工具、两者都登记，或不 `registerTool`。OA 桥接是「插件 + 唯一工具 `oa_workflow`」：`plugins.allow` 与 `tools.alsoAllow` **两层都要开**。企微插件是「一个包、两种能力」：去掉 `alsoAllow` 里的 `wecom_mcp` 只关智能表格，不关通道。两层开关的正文只在 `openclaw.json 配置参考.md` 第 5.5 节。
 
 ### 1.1 不是通用 HTTP 工具
 
-禁止做成「模型传入 URL、Header、Body」的通用 HTTP 工具。提示注入可导致越权调用外部系统。模型只能调用插件声明的固定 **action**。OA 现网五个 action（`prepare` / `attach` / `submit_confirmed` / `status` / `cancel`）的详表、是否调 Ecology、失败码只在 [OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA%20Workflow%20Bridge（Redis）接入手册.md) **§7** 维护。
+禁止做成「模型传入 URL、Header、Body」的通用 HTTP 工具。提示注入可导致越权调用外部系统。模型只能调用插件声明的固定 **action**。OA 现网五个 action（`prepare` / `attach` / `submit_confirmed` / `status` / `cancel`）的详表、是否调 Ecology、失败码只在 [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) **§7** 维护。
 
 ### 1.2 模型不能传入或修改
 
@@ -77,7 +77,7 @@ sessionKey 或 sessionId = 当前会话标识
 
 禁止写入日志或状态：AppSecret、token、RSA 密文、原始 SenderId / 人员资源 ID 明文、附件 base64、完整工单正文。
 
-不要把密钥写入 `openclaw.json` 明文。Docker 走 Compose secrets → entrypoint 环境变量；本插件 `secret-resolver.mjs` **只读** `OA_API_USER_ID` / `OA_APP_SECRET`，不回退 DPAPI、不读映射目录。身份映射权威是 Redis `idmap`。miss 路径是 **身份适配器**（独立包已验证，不注册模型 tool），不要做成「模型可调任意 URL」的通用 HTTP 工具；设计见 `OA_tool/身份适配器说明.md`。
+不要把密钥写入 `openclaw.json` 明文。Docker 走 Compose secrets → entrypoint 环境变量；本插件 `oa-client.mjs` **只读**环境变量 `OA_API_USER_ID` / `OA_APP_SECRET`，不回退 DPAPI、不读映射目录。身份映射权威是 `oa_identity` 缓存。miss 路径是 **身份适配器**（独立包已验证，不注册模型 tool），不要做成「模型可调任意 URL」的通用 HTTP 工具；设计见 `OA_tool/身份适配器说明.md`。
 
 ---
 
@@ -92,8 +92,8 @@ wecom-openclaw-plugin（通道 + 可信身份 requesterSenderId）
     ↓
 xA Agent（itservicedeskagent）
     ↓ 理解对话、整理 draft
-oa-workflow-bridge-redis（工具 oa_workflow）
-    ├── Redis          pending / ledger（按工单点查）
+oa-workflow-bridge（工具 oa_workflow）
+    ├── MySQL          oa_ticket / oa_inbox / oa_identity
     ├── 本地 staging/  附件暂存
     ├── secrets        OA 凭据 + 企微自建应用转换凭据
     └── submit 锁外    getHrmSimpleInfo → doCreateRequest
@@ -101,7 +101,7 @@ oa-workflow-bridge-redis（工具 oa_workflow）
    Ecology OA（流程 602）
 ```
 
-身份（`adapter=on` + Redis `idmap`，**已验证**）在通道与桥接之间注入独立身份适配器：`user/get`（回退 `openuserid_to_userid`）→ 对齐工号 → `getHrmUserInfoWithPage` → 写回 `idmap`。适配器是 Gateway 进程内包，不是单独服务器，**不是** 模型可调 tool，也不把企微 / **用工号点查** 塞进 `oa-client.mjs`。提交前部门 / 岗位 / 地点由桥接 `hrm-profile.mjs` 调 `getHrmSimpleInfo`。见 `OA_tool/身份适配器说明.md` 与 `xA 现网加固与演进全景.md` 第 7 节。
+身份（`adapter=on` + `oa_identity` 缓存，**已验证**）由桥接内 `src/identity/` 完成：`user/get`（回退 `openuserid_to_userid`）→ 对齐工号 → `getHrmUserInfoWithPage` → 写回 `idmap`。适配器是 Gateway 进程内包，不是单独服务器，**不是** 模型可调 tool，也不把企微 / **用工号点查** 塞进 `oa-client.mjs`。提交前部门 / 岗位 / 地点由桥接 `hrm-profile.mjs` 调 `getHrmSimpleInfo`。见 `OA_tool/身份适配器说明.md` 与 `xA 现网加固与演进全景.md` 第 7 节。
 
 | 模型负责 | 插件负责 |
 | --- | --- |
@@ -116,19 +116,19 @@ oa-workflow-bridge-redis（工具 oa_workflow）
 
 ## 3. 工具契约、字段与接入（不在此重复维护）
 
-工具名、action、参数、错误码、OA 字段映射、`system-options.json`、`plugins.allow` / compose 增量，一律以生产主路径为准：
+工具名、action、参数、错误码、OA 字段映射、`systems.json`、`plugins.allow` / compose 增量，一律以生产主路径为准：
 
-**[OA_tool/OA Workflow Bridge（Redis）接入手册.md](OA_tool/OA Workflow Bridge（Redis）接入手册.md)** 第 5、7 节
+**[OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA Workflow Bridge 接入手册.md)** 第 5、7 节
 
-Agent 侧：即使插件已 loaded，也必须把 `oa_workflow` 加入 `tools.alsoAllow` 才能调用。**现网已加入**（全局 + `itservicedeskagent`），不要加入 `wecom_mcp`。规则包按 `active=true` 执行；现网是否调用 `doCreateRequest` 看实际加载的 `bridge-config.json`。切流核对、两包 `redis` 依赖（现网已装齐）见 OA Redis 手册第 4.2 / 10 / 11 节。完整 json 见 `openclaw.json 配置参考.md` 第 15 节。
+Agent 侧：即使插件已 loaded，也必须把 `oa_workflow` 加入 `tools.alsoAllow` 才能调用。**现网已加入**（全局 + `itservicedeskagent`），不要加入 `wecom_mcp`。规则包按 `active=true` 执行；现网是否调用 `doCreateRequest` 看实际加载的 `bridge-config.json`。接入核对、插件依赖见 OA 桥接接入手册第 4.2 / 5 / 10 节。完整 json 见 `openclaw.json 配置参考.md` 第 15 节。
 
-独立 Redis 与 `OA_REDIS_URL` 注入见 [Redis 独立实例部署手册.md](Redis 独立实例部署手册.md)。
+独立 MySQL 准备见 [MySQL 数据库准备.md](MySQL%20数据库准备.md)；密码经 secret 注入 `OA_MYSQL_PASSWORD`。
 
 ---
 
 ## 4. 禁止事项
 
-- 不要把 OA 密钥、API User ID、Redis 密码写入 `openclaw.json` 明文
+- 不要把 OA 密钥、API User ID、MySQL 密码写入 `openclaw.json` 明文
 - 不要做「模型可调任意外部 API」的通用工具
 - 不要按姓名模糊匹配 OA 申请人
 - 不要在 `active=false` 时改 AGENTS.md 声称 OA 已通
@@ -139,7 +139,7 @@ Agent 侧：即使插件已 loaded，也必须把 `oa_workflow` 加入 `tools.al
 - 不要把 `~/xa/secrets/` 提交到 git
 - 不要把身份映射文件挂进 workspace 或 `.openclaw`
 - 不要在 `plugins.allow` 中写旧 id `oa-workflow-bridge`
-- 不要把企微转换或 **用工号点查人员 id** 注册为模型可调 tool；转换层走 `wecom-oa-identity-adapter`。提交前资料现查也不是模型 tool
+- 不要把企微转换或 **用工号点查人员 id** 注册为模型可调 tool；转换层是桥接内部模块 `src/identity/`。提交前资料现查也不是模型 tool
 
 ---
 
@@ -148,14 +148,13 @@ Agent 侧：即使插件已 loaded，也必须把 `oa_workflow` 加入 `tools.al
 | 文档 | 内容 |
 | --- | --- |
 | `xA 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
-| `OA_tool/OA Workflow Bridge（Redis）接入手册.md` | OA 桥接架构、Key、接入、工具 API（生产主路径） |
-| `OA_tool/企微到OA身份与数据流.md` | 三种身份、Redis `idmap` |
+| `OA_tool/OA Workflow Bridge 接入手册.md` | OA 桥接架构、表结构、接入、工具 API（生产主路径） |
+| `OA_tool/企微到OA身份与数据流.md` | 三种身份、`oa_identity` 缓存 |
 | `OA_tool/身份适配器说明.md` | 转换层（独立包已验证） |
-| `Redis 独立实例部署手册.md` | 独立 Redis、连接契约、备份轮换 |
+| `MySQL 数据库准备.md` | 独立 MySQL：建库、账号、网络、备份 |
 | `OpenClaw Gateway WSL2-Docker 安装手册.md` | WSL2 + Docker Gateway 全链路 |
 | `WeCom 通道插件接入手册.md` | 企微通道与 wecom_mcp |
 | `OpenClaw Gateway Docker 运维手册.md` | 日常启停、备份、巡检 |
 | `OA_tool/Ecology 流程创建 API 说明.md` 与本手册 | OA 接口与恢复顺序 |
-| `openclaw/OA_WORKFLOW_CONTRACT.md` | OA 流程契约 |
 | [OpenClaw Plugins](https://docs.openclaw.ai/plugins) | 官方插件机制 |
 | [Ecology API 文档](https://e-cloudstore.com/ec/api/applist/index.html#/) | OA 接口参考 |

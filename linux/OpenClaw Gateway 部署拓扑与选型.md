@@ -211,7 +211,7 @@ openclaw --profile rescue gateway --port 19789
 
 - SmartX 超融合上的 Linux 虚机跑 Docker，不依赖员工 PC。操作步骤见 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md)**；宿主边界见 [xA 现网加固与演进全景.md](xA%20现网加固与演进全景.md) 第 4 节
 - 密钥进企业 Vault，不散落在各人 `~/xa/secrets`
-- OA 桥接插件依赖与 WSL 相同：用官方镜像装一次（见 `OA_tool/OA Workflow Bridge（Redis）接入手册.md` 第 4.2 节）；不要在服务器装 Node，也不要写进 compose / entrypoint
+- OA 桥接插件依赖与 WSL 相同：用官方镜像装一次（见 `OA_tool/OA Workflow Bridge 接入手册.md` 第 4.2 节）；不要在服务器装 Node，也不要写进 compose / entrypoint
 - 高可用用**主备**（同一 Bot 同一时刻只连一个 Gateway），不要多活抢同一机器人
 
 ### 5.6 Docker 容器内使用 `--profile`（不推荐）
@@ -368,7 +368,7 @@ Dashboard：`http://localhost:18790/`，token 用 `cat ~/xa-hr/secrets/gateway_t
 
 - 用 SmartX 超融合上的 Linux 虚机跑 Docker，不要依赖某台办公 PC 的 WSL；不要在 SmartX 控制台或宿主机节点上装 Gateway；
 - 密钥用企业 Vault 或编排器 secret，不要把生产密钥散落在各人 `~/xa/secrets`；
-- OA 插件 `node_modules` 用官方镜像在部署时装一次（与 WSL 相同，见 OA Redis 接入手册 4.2），不要在服务器装 Node；
+- OA 插件 `node_modules` 用官方镜像在部署时装一次（与 WSL 相同，见 OA 桥接接入手册 4.2），不要在服务器装 Node；
 - 企微按插件要求单独做回调或出网，不要和「再复制一个容器」绑在一起；
 - 高可用用**主备**（同一 Bot 同一时刻只连一个 Gateway），不要多活抢同一个机器人。
 

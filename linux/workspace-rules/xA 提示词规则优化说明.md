@@ -4,7 +4,7 @@
 
 **本文只讲：** 提示词规则为什么改、改完怎么加载、关键词与确认口令、插件如何硬拦「类型 × 系统」、以及 `skipBootstrap` 怎么加。2026-09-04 起热路径**不再** `read` 状态卡 / 区域映射 / 本机台账：全部运行规则写进已注入的 `AGENTS.md`，幂等看 `oa_workflow`。
 
-规则正文在 `openclaw/workspace-rules/`（人编映射另见 `openclaw/MAPPING_RULES.md` 等）。全景流程见 [xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md)。`openclaw.json` 字段见 [openclaw.json 配置参考.md](../openclaw.json%20配置参考.md)。阅读顺序见 [README.md](../README.md)。
+规则正文只有 `workspace-rules/workspace/AGENTS.md` 一份（原 `MAPPING_RULES.md` 等人编副本已删除；系统名 / 处理人 id 另在插件 `systems.json`）。全景流程见 [xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md)。`openclaw.json` 字段见 [openclaw.json 配置参考.md](../openclaw.json%20配置参考.md)。阅读顺序见 [README.md](../README.md)。
 
 对照官方：[Agent workspace](https://docs.openclaw.ai/concepts/agent-workspace)、[Agent runtime](https://docs.openclaw.ai/concepts/agent)、[config-agents — skipBootstrap](https://docs.openclaw.ai/gateway/config-agents)。
 
@@ -14,7 +14,7 @@
 
 规则内容大体正确。真正拖慢现网的是**热路径多次 `read` 换多次 `model-fetch`**，以及页脚占位和模型扩写问题描述。
 
-旧 `AGENTS.md` 要求每次会话开始依次 `read` 11 个文件。2026-09-02 包改为按场景读映射 / 工单号 / 状态卡。2026-09-04 起：映射、系统清单、工单号与 draft 口径写入已注入的 `AGENTS.md`。同日稍后：状态卡与区域映射也并入 `AGENTS.md`，热路径**禁止再 `read` 任何规则 Markdown**。同日再收紧：热路径**禁止**读写 `memory/ticket-ledger.md`，也禁止 `write` / `edit` / `memory_search` / `memory_get` / `message`。2026-09-09 起：热路径**禁止** `read` inbound 图片 / 文件，禁止根据图意或文档正文猜故障；只发附件只调 `attach`。工单幂等看本会话 `oa_workflow` 回执与插件 Redis。人员页脚文件与运行时不用的 JSON 导出已删除。
+旧 `AGENTS.md` 要求每次会话开始依次 `read` 11 个文件。2026-09-02 包改为按场景读映射 / 工单号 / 状态卡。2026-09-04 起：映射、系统清单、工单号与 draft 口径写入已注入的 `AGENTS.md`。同日稍后：状态卡与区域映射也并入 `AGENTS.md`，热路径**禁止再 `read` 任何规则 Markdown**。同日再收紧：热路径**禁止**读写 `memory/ticket-ledger.md`，也禁止 `write` / `edit` / `memory_search` / `memory_get` / `message`。2026-09-09 起：热路径**禁止** `read` inbound 图片 / 文件，禁止根据图意或文档正文猜故障；只发附件只调 `attach`。工单幂等看本会话 `oa_workflow` 回执与插件数据库。人员页脚文件与运行时不用的 JSON 导出已删除。
 
 状态卡以对照表写入 `AGENTS.md`（员工可见三行格式不变），避免九套模板把单文件顶到截断点。官方默认 `bootstrapMaxChars=20000`，截断点之后的禁令会消失。落地后用 `/context detail` 确认 `AGENTS.md` 未被截断。
 
@@ -27,13 +27,9 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 | 文件 | OpenClaw 行为 | 旧 AGENTS.md | 现网规则包 |
 | --- | --- | --- | --- |
 | `AGENTS.md` / `SOUL.md` / `IDENTITY.md` | 自动注入 | 会话开始再依次 read | **禁止重读**。2026.9.2 起 `TOOLS.md` **不再**自动注入，工具契约已并入 `AGENTS.md` 的 `## Tools` |
-| `MEMORY.md` | 存在则注入；官方要求群聊不要加载私人记忆 | 每次都读，含企微群 | 只留索引；**禁止**再读。工单幂等看 `oa_workflow` / Redis，不读 `ticket-ledger.md` |
+| `MEMORY.md` | 存在则注入；官方要求群聊不要加载私人记忆 | 每次都读，含企微群 | 只留索引；**禁止**再读。工单幂等看 `oa_workflow` / 插件数据库，不读 `ticket-ledger.md` |
 | `USER.md` / `HEARTBEAT.md` | 缺失会注入 missing-file 标记 | 未提供 | 已补短桩 |
 | `BOOTSTRAP.md` | 全新 workspace 才生成；未设 `skipBootstrap` 可能被重建 | 禁止执行 | 规则禁止执行；配置见第 8 节 |
-| `MAPPING_RULES.md` / `ROUTING_RULES.md` / `TICKET_SCHEMA.md` | 不自动注入 | 每次全读 | **禁止 read**；运行时副本在已注入的 `AGENTS.md`。改清单必须同步两处 |
-| `TICKET_STATUS_BANNER.md` | 不自动注入 | 每次全读 | **禁止 read**；状态卡对照表在已注入的 `AGENTS.md`。改状态行必须同步两处 |
-| `REGION_MAPPING.md` | 不自动注入 | 有已核验部门才读 | **禁止 read**；映射已写入 `AGENTS.md` |
-| `OA_WORKFLOW_CONTRACT.md` | 不自动注入 | 每次全读 | 禁止 read；契约摘要在已注入的 `AGENTS.md`（含 `## Tools`） |
 
 ---
 
@@ -44,9 +40,9 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 | 场景 | 读取 | 不读 |
 | --- | --- | --- |
 | 问候 / 你是谁 / 能力介绍 | 无（用已注入文件） | 任何规则 Markdown、台账、页脚 |
-| 新工单或归属未定 | **无**（匹配、系统清单、区域映射都在 `AGENTS.md`） | `MAPPING_RULES.md` / `ROUTING_RULES.md` / `REGION_MAPPING.md` / `ticket-ledger.md` |
-| 整理 draft / 调用 `oa_workflow` | **无**（draft 口径在 `AGENTS.md`；内部幂等号由插件生成） | `TICKET_SCHEMA.md`；HTTP / Redis / OA 字段名；本机台账 |
-| 工单相关回复 | **无**（状态卡在 `AGENTS.md`） | `TICKET_STATUS_BANNER.md`、页脚、已注入文件 |
+| 新工单或归属未定 | **无**（匹配、系统清单、区域映射都在 `AGENTS.md`） | `ticket-ledger.md`、任何其它规则 Markdown |
+| 整理 draft / 调用 `oa_workflow` | **无**（draft 口径在 `AGENTS.md`；内部幂等号由插件生成） | HTTP / 数据库 / OA 字段名；本机台账 |
+| 工单相关回复 | **无**（状态卡在 `AGENTS.md`） | 页脚、已注入文件 |
 | 重放 / 进度 / 补充已有单 | **无文件**。`status` 不带 ID：有 pending 出确认卡；没有则原样输出 `hintZh`（条数 + 最多 5 条已提交单号）。**不要**按 OA 工单号查具体进度 | `memory/ticket-ledger.md`、问候不要打开台账 |
 | 员工发了图片 / 文件 | **无**（只调 `attach`，凭回执说已收到；随单由插件自动暂存） | inbound 图片 / 文件、规则文件、台账；不要 `read`，不要按图意或文档正文猜故障，不要把路径抄进 draft |
 
@@ -56,15 +52,9 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 
 | 文件 | 职责 |
 | --- | --- |
-| `AGENTS.md` | 决策树 + 硬约束 + 口令 + 映射 + 清单（全集+排除）+ 区域 + draft + 员工可见回复 + `## Tools`；**无页脚**。OpenClaw 2026.9.2 不再注入 `TOOLS.md` |
+| `AGENTS.md` | 唯一规则源：决策树 + 硬约束 + 口令 + 映射（含未命中兜底）+ 清单（全集+排除）+ 区域 + draft + 员工可见回复 + `## Tools`；**无页脚**。OpenClaw 2026.9.2 不再注入 `TOOLS.md` |
 | `SOUL.md` | 人格与语气；不扩写问题描述；不重复成功口径；不阅读附件内容 |
 | `IDENTITY.md` | 名称、短介绍、完整自我介绍 |
-| `OA_WORKFLOW_CONTRACT.md` | 两阶段确认与失败边界（人读；Agent 不 read） |
-| `MAPPING_RULES.md` | 关键词、匹配顺序（人编；须同步 `AGENTS.md`；Agent 不 read） |
-| `ROUTING_RULES.md` | 类型 → 系统名清单（人编；须同步 `AGENTS.md`；Agent 不 read） |
-| `REGION_MAPPING.md` | 部门 → 区域（人编；须同步 `AGENTS.md`；Agent 不 read） |
-| `TICKET_SCHEMA.md` | 工单号与 draft 约束（人编；须同步 `AGENTS.md`；Agent 不 read） |
-| `TICKET_STATUS_BANNER.md` | 回执码 → 模板块对照（人读；须同步 `AGENTS.md` / `xA企微回复模板.md`；Agent 不 read） |
 | `xA企微回复模板.md` | 员工可见全文（人编；须同步 `AGENTS.md`「用户可见回复」；Agent 不 read） |
 | `USER.md` | 多用户服务台，不建个人画像 |
 | `HEARTBEAT.md` | 心跳不建单、不联系员工 |
@@ -83,7 +73,7 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 - 不得覆盖 `requesterSenderId`，不得传入 URL、凭据、流程 ID、OA 字段名、人员 id 或建议责任人。
 - 禁止 `read` 任何附件。只发图 / 文件只调 `attach`，凭回执说话。`problemDescription` 只抄员工文字，不要写见图 / 见附件。
 
-提示词是请求；`tools.alsoAllow`、工具 schema、`ticket-type-systems.json` 才是门禁。`wecom_mcp` 已不在白名单，规则点到即可。
+提示词是请求；`tools.alsoAllow`、工具 schema、插件 `systems.json` 才是门禁。`wecom_mcp` 已不在白名单，规则点到即可。
 
 ---
 
@@ -97,7 +87,7 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 
 ### 5.2 关键词（相对旧包）
 
-权威：关键词与匹配顺序以 `MAPPING_RULES.md` 为准（须同步已注入的 `AGENTS.md`）。插件认 `system-options.json` + `system-handlers.json` + `ticket-type-systems.json`。版本 `2026-09-07-oa-workspace-mapping-v4`。相对旧包收紧的冲突点：
+权威：关键词与匹配顺序以 `AGENTS.md`「匹配规则」为准。插件认 `systems.json`（选项 ID、处理人、允许类型）；`npm test` 校验它与 AGENTS.md 系统表一致。零条命中按「未命中兜底」：类型未命中→运维支持，系统未命中→其他。版本 `2026-09-07-oa-workspace-mapping-v4`。相对旧包收紧的冲突点：
 
 | 冲突 | 旧词过宽 | 现网 |
 | --- | --- | --- |
@@ -188,32 +178,30 @@ OpenClaw 在**新会话第一轮**把工作区 bootstrap 文件注入 Project Co
 
 ## 6. 插件硬拦：类型 × 系统
 
-旧逻辑：`mapping.mjs` 只查扁平的 `system-options.json`。提示词写「权限申请不能选电脑/打印机」，插件仍会接受。
+旧逻辑：`mapping.mjs` 只查扁平的系统选项表。提示词写「权限申请不能选电脑/打印机」，插件仍会接受。
 
-现网：`prepare` 会加载 `oa-workflow-bridge-redis/ticket-type-systems.json`，与 `ROUTING_RULES.md` 三类清单对齐。非法组合抛 `System name is not allowed for this ticket type`。
+现网：`prepare` 按 `oa-workflow-bridge/systems.json` 每个系统的 `types` 校验，与 `AGENTS.md` 三类清单对齐。模型没传类型 / 系统时，插件兜底为运维支持 / 其他（类型已传则该类型 / 其他）。非法组合抛 `System name is not allowed for this ticket type`。
 
 | 类型 | 没有这些系统 |
 | --- | --- |
 | 权限申请 | 电脑/打印机/网络问题（各地点）、OA开发支持、ERP开发支持、北森招聘系统 |
 | IT需求 | 「邮箱系统（国内）」、电脑/打印机/网络问题、OA开发支持、ERP开发支持、北森招聘系统 |
 
-测试：`OA_tool/oa-workflow-bridge-redis` 下 `npm test`（含类型白名单用例）。只改 workspace 规则、不更新插件代码和该 JSON，白名单不会生效。
+测试：`OA_tool/oa-workflow-bridge` 下 `npm test`（含类型白名单用例）。只改 workspace 规则、不更新 `systems.json`，白名单不会生效。
 
 ---
 
 ## 7. 把规则同步到现网 workspace
 
-本仓库规则在 `openclaw/workspace-rules/`。现网工作区是 `~/xa/workspace/`（容器 `/home/node/.openclaw/workspace`）。
+本仓库规则在 `workspace-rules/workspace/`。现网工作区是 `~/xa/workspace/`（容器 `/home/node/.openclaw/workspace`）。
 
 ```bash
 # 在 WSL 家目录；不要覆盖已有 memory/ticket-ledger.md 时先备份
 REPO=/mnt/f/workspace/ADK-OFFICE/openclaw/linux
 cp -a ~/xa/workspace/memory/ticket-ledger.md /tmp/ticket-ledger.md.bak 2>/dev/null || true
-cp -r "$REPO/openclaw/workspace-rules/." ~/xa/workspace/
-cp "$REPO/openclaw/MAPPING_RULES.md" "$REPO/openclaw/ROUTING_RULES.md" \
-   "$REPO/openclaw/REGION_MAPPING.md" "$REPO/openclaw/TICKET_SCHEMA.md" \
-   "$REPO/openclaw/TICKET_STATUS_BANNER.md" "$REPO/openclaw/OA_WORKFLOW_CONTRACT.md" \
-   ~/xa/workspace/
+cp -r "$REPO/workspace-rules/workspace/." ~/xa/workspace/
+# 旧版人编副本已删除，现网残留的可一并删掉
+rm -f ~/xa/workspace/{MAPPING_RULES,ROUTING_RULES,REGION_MAPPING,TICKET_SCHEMA,TICKET_STATUS_BANNER,OA_WORKFLOW_CONTRACT}.md
 # 若上面备份了台账，再拷回去
 test -f /tmp/ticket-ledger.md.bak && cp /tmp/ticket-ledger.md.bak ~/xa/workspace/memory/ticket-ledger.md
 sudo chown -R 1000:1000 ~/xa/workspace
@@ -221,8 +209,8 @@ sudo chown -R 1000:1000 ~/xa/workspace
 
 `REPO` 换成本仓库路径。插件侧同时更新：
 
-- `ticket-type-systems.json`（新文件）
-- `src/mapping.mjs`、`src/config.mjs`、`src/tool.mjs`
+- `systems.json`（系统名 / 选项 ID / 处理人 / 允许类型）
+- 改插件代码后重启 Gateway
 
 工作区 Markdown 一般下一轮对话生效，通常不用重启 Gateway。改 `openclaw.json` 或插件代码后：配置热加载或 `restart`，插件 `load.paths` 变更必须重启。见运维手册。
 
@@ -316,11 +304,10 @@ xA 必须在 **`agents.defaults` 和 `agents.entries.itservicedeskagent` 两处*
 
 ## 9. 不要做的事
 
-- 不要把 `TICKET_STATUS_BANNER.md` 九套完整代码块原样粘进 `AGENTS.md`（用对照表，员工可见三行格式不变）。映射 / 路由 / 工单号 / 状态卡 / 区域已经在 `AGENTS.md`；落地后用 `/context detail` 确认未被 `bootstrapMaxChars`（默认 20000）截断。不要为了「再确认规则」在热路径 `read`。
+- 不要把整套模板代码块原样粘进 `AGENTS.md`（用对照表，员工可见三行格式不变）。映射 / 路由 / 工单号 / 状态卡 / 区域已经在 `AGENTS.md`；落地后用 `/context detail` 确认未被 `bootstrapMaxChars`（默认 20000）截断。不要为了「再确认规则」在热路径 `read`。
 - 不要把 `skills.entries.*.enabled: false` 当成「全部 skill 已关」。xA 必须在 defaults **和** `itservicedeskagent` 都写 `skills: []`，否则企微插件的 `wecomcli-*` 仍进 system prompt。
 - 不要恢复已停用的回复状态栏。
-- 不要在提示词里教模型 OA 字段名、`doCreateRequest`、HTTP `requestid`、Redis 键、SHA-256。模型只认工具回执的 `code` 与 `requestId`。
-- 不要把 `wecom-oa-identity-adapter` 写入 `tools.alsoAllow`。
+- 不要在提示词里教模型 OA 字段名、`doCreateRequest`、HTTP `requestid`、数据库表、SHA-256。模型只认工具回执的 `code` 与 `requestId`。
 - 不要在 `active=false` 时把 `OA_BRIDGE_INACTIVE` 说成已创建 OA。
 - 不要用 `openclaw doctor --fix` 当第一次生产试验（可能改 `agents.entries` 结构）。见运维手册。
 
@@ -330,11 +317,9 @@ xA 必须在 **`agents.defaults` 和 `agents.entries.itservicedeskagent` 两处*
 
 | 文档 | 内容 |
 | --- | --- |
-| `openclaw/workspace-rules/AGENTS.md` | 运行规则（决策树 / 硬约束 / 口令 / 映射 / 清单全集+排除 / 区域 / draft / 员工可见回复 / `## Tools`；无页脚） |
-| `openclaw/MAPPING_RULES.md` | 关键词与失败边界（人编，须同步 AGENTS.md） |
-| `openclaw/ROUTING_RULES.md` | 类型 → 系统名清单（人编，须同步 AGENTS.md） |
+| `workspace-rules/workspace/AGENTS.md` | 唯一运行规则（决策树 / 硬约束 / 口令 / 映射 / 清单全集+排除 / 区域 / draft / 员工可见回复 / `## Tools`；无页脚） |
 | [xA企微回复模板.md](xA企微回复模板.md) | 员工可见全文；改一句必须同步 `AGENTS.md` |
-| [OA Workflow Bridge（Redis）接入手册](../OA_tool/OA%20Workflow%20Bridge（Redis）接入手册.md) | `oa_workflow` 契约与错误码 |
+| [OA Workflow Bridge 接入手册](../OA_tool/OA%20Workflow%20Bridge%20接入手册.md) | `oa_workflow` 契约与错误码 |
 | [openclaw.json 配置参考](../openclaw.json%20配置参考.md) 第 4.2 / 15 节 | `skipBootstrap` 字段；现网 json 样例 |
 | [DashScope 兼容 Provider 配置手册](../DashScope%20兼容%20Provider%20配置手册.md) §2.5 | `MEMORY.md` 缺失导致二次 `model-fetch` |
 | [xA 现网加固与演进全景](../xA%20现网加固与演进全景.md) | 各层 I/O；工作区规则在 `prepare` 之前用完 |

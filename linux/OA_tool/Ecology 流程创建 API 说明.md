@@ -2,7 +2,7 @@
 
 > 本文档由仓库原文档**重组**而来：只调整章节归属与交叉引用，**不改变**部署步骤、命令、YAML、错误码或禁止事项。阅读顺序见 [README.md](../README.md)。
 
-上游 Ecology HTTP 步骤如下。插件侧字段映射、`otherParams` 现网值与成功判定见 [OA Workflow Bridge（Redis）接入手册.md](OA Workflow Bridge（Redis）接入手册.md) 第 7 节。xA 建单与 `bridge-config.json` 的 `isnextflow` 对齐：现网 `"0"`（创建成功但不自动流转）；**不要**写 `Content-Length: 0`（会把 JSON 请求体裁成空）。
+上游 Ecology HTTP 步骤如下。插件侧字段映射、`otherParams` 现网值与成功判定见 [OA Workflow Bridge 接入手册.md](OA%20Workflow%20Bridge%20接入手册.md) 第 7 节。xA 建单与 `bridge-config.json` 的 `isnextflow` 对齐：现网 `"0"`（创建成功但不自动流转）；**不要**写 `Content-Length: 0`（会把 JSON 请求体裁成空）。
 
 ---
 
@@ -180,7 +180,7 @@ xA 插件实际发送的 `otherParams` 如下（`isnextflow` 取自 `bridge-conf
 | `delReqFlowFaild` | String | xA 固定 `"1"` |
 | `isVerifyPer` | String | xA 固定 `"1"` |
 
-官方 `clry` **始终必填**，值为附录对应负责人 id（多人逗号分隔、无空格）。xA 由插件按 `systemName` 写入 `system-handlers.json`，模型不要传人员 id。现网 `isnextflow` 为 `"0"`（见 `bridge-config.json`）。不要抄官方示例的 `Content-Length: 0`。
+官方 `clry` **始终必填**，值为附录对应负责人 id（多人逗号分隔、无空格）。xA 由插件按 `systemName` 取 `systems.json` 的 `handlers` 写入，模型不要传人员 id。现网 `isnextflow` 为 `"0"`（见 `bridge-config.json`）。不要抄官方示例的 `Content-Length: 0`。
 
 #### mainData 字段说明
 
@@ -233,27 +233,27 @@ xA 插件实际发送的 `otherParams` 如下（`isnextflow` 取自 `bridge-conf
 | 23 | MES系统（越南C部） | 庞立亮、阮名孟、范文南、新文雄、绍氏欣 | 18196,27697,27507,27338,9777 |
 | 24 | 法大大电子签平台 | 邹茜茜 | 9673 |
 
-OA 选项编号从 21 跳到 23，没有 22。xA 的 `systemName` 必须与 `system-options.json` 名称一致（含括号，无「OA 系统」那种空格）：`邮箱系统（国内）`、`文件管理系统（国内）`、`MES系统（越南B部）`。`clry` 写入 `system-handlers.json` 中的负责人 id，不是状态卡上的姓名。
+OA 选项编号从 21 跳到 23，没有 22。xA 的 `systemName` 必须与 `systems.json` 名称一致（含括号，无「OA 系统」那种空格）：`邮箱系统（国内）`、`文件管理系统（国内）`、`MES系统（越南B部）`。`clry` 写入 `systems.json` 中的负责人 id，不是状态卡上的姓名。
 
 ## 第四步：两条人事接口（不要混）
 
 生产有两次调 OA 人事，**不是同一个接口**。对照只在这里写全 HTTP；链路位置见 [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) 第 7 节。
 
-| | 身份点查（适配器，`prepare` miss） | 提交前资料（桥接，`submit_confirmed`） |
+| | 身份点查（身份转换，`prepare` miss） | 提交前资料（桥接，`submit_confirmed`） |
 | --- | --- | --- |
 | **接口** | `POST /api/hrm/resful/getHrmUserInfoWithPage` | `GET /api/hrm/simpleinfo/getHrmSimpleInfo?userid=` |
-| **谁调用** | `wecom-oa-identity-adapter/src/oa-hrm.mjs` | `oa-workflow-bridge-redis/src/hrm-profile.mjs` → `OAClient.authenticatedRequest` |
+| **谁调用** | `oa-workflow-bridge/src/identity/oa-hrm.mjs` | `oa-workflow-bridge/src/hrm-profile.mjs` → `OAClient.authenticatedRequest` |
 | **认证** | 只 `Content-Type`，**无** token / appid / userid | token + `appid` + RSA(**申请人**)；与 `doCreateRequest` 同一套钥匙 |
 | **查找键** | `params.workcode` = 工号 | Query `userid` = 已映射的数字人员 id |
-| **成功产出** | `data.dataList[0].id` → Redis `idmap` / Header `userid` / `xqsqr` | `simpleInfo.departmentid` / `jobtitle` / `locationid` → `xqsqbm` / `gw` / `bgdd` |
+| **成功产出** | `data.dataList[0].id` → `oa_identity` 缓存 / Header `userid` / `xqsqr` | `simpleInfo.departmentid` / `jobtitle` / `locationid` → `xqsqbm` / `gw` / `bgdd` |
 | **失败码** | `OA_IDENTITY_NOT_FOUND` / `AMBIGUOUS` / `INACTIVE` / `LOOKUP_FAILED` | `OA_PROFILE_LOOKUP_FAILED` / `OA_PROFILE_INCOMPLETE` |
 | **失败时建单** | 不写 pending、不建单 | pending 退回 awaiting，**不建单、不标 `unknown`** |
 
 路径拼写是官方的 `resful`，不是 `restful`。`applytoken` / `doCreateRequest` / `getCreateWorkflowList` **仍然**要认证 Header。不要把身份点查的「现网可不带头」推广到建单或资料现查。
 
-### 用工号查人员 id（身份适配器）
+### 用工号查人员 id（身份转换）
 
-用于：已知 **工号** 时查出 OA 内部人员 `id`（写入 `oa_api_user_id.txt`，或由身份适配器写入 Redis `idmap`）。
+用于：已知 **工号** 时查出 OA 内部人员 `id`（写入 `oa_api_user_id.txt`，或由身份转换写入 `oa_identity` 缓存）。
 
 ⚠️ **访问该接口需联系 OA 管理员把 Gateway 出口 IP 加入白名单。** 现网身份点查走此接口；白名单未开时会表现为人事 HTTP 失败（`OA_IDENTITY_LOOKUP_FAILED`），不要当成工号写错就换接口。
 
@@ -296,7 +296,7 @@ curl -sS -X POST 'https://adtekoa.com/api/hrm/resful/getHrmUserInfoWithPage' \
 | **超时 / 重试** | 30 秒；同一请求不重试。`002` / 网络失败记 `OA_PROFILE_LOOKUP_FAILED`，**不要**标 ledger `unknown` |
 | **写入建单** | `simpleInfo.departmentid` → `xqsqbm`；`simpleInfo.jobtitle` → `gw`；`simpleInfo.locationid` → `bgdd`。兼容顶层 / `data` 包裹与驼峰别名。**不要**用 `departmentName` / `fieldInfo` 的中文名当资源 ID |
 
-禁止把完整响应（姓名、手机等）写入日志、Redis、员工回复或仓库。只保留三个数字资源 ID，且只在提交当次内存里使用，不写 pending。
+禁止把完整响应（姓名、手机等）写入日志、数据库、员工回复或仓库。只保留三个数字资源 ID，且只在提交当次内存里使用，不写 pending。
 
 **安全：** 响应含密码密文、身份证、手机、住址等。只抄三个资源 ID。匿名可查已被现网收回（`002`）；不要再裸调。不要当全员花名册扫描接口。
 

@@ -159,7 +159,7 @@ Secret **只**出现在换 token；后续接口不再带 Secret。不要理解�
 
 群聊必须以**实际发送人**的 `from.userid` 建单，不能用群 `chatid` 代替人员。
 
-公开版官方插件 **没有** `WeComIdentityVerified`、`SenderName`、部门路径、大区/区域、工号。Agent 规则已按缺省执行：没有已核验展示字段时状态栏写「身份待核验」/「未获取」，不得用 OA `idmap` 填姓名。通道若额外回传姓名/部门，只用于展示和区域缩小，**不是** `aibot_msg_callback` 自带的，也不能当成 OA 现查工号。
+公开版官方插件 **没有** `WeComIdentityVerified`、`SenderName`、部门路径、大区/区域、工号。Agent 规则已按缺省执行：没有已核验展示字段时状态栏写「身份待核验」/「未获取」，不得用 OA 身份缓存填姓名。通道若额外回传姓名/部门，只用于展示和区域缩小，**不是** `aibot_msg_callback` 自带的，也不能当成 OA 现查工号。
 
 ### 5.3 `oa_workflow` 可信上下文（模型改不了）
 

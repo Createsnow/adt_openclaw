@@ -803,7 +803,7 @@ Emoji 词表（一对一，不要混用）：`🛠️` 品牌；`📝` 已记下
 
 ## 15. 提交失败
 
-`prepare` 与 `submit_confirmed` 的身份未映射用同一块。回执若带 `hintZh` 且下面没有对应模板，原样输出 `hintZh`，不要贴英文 `message`。不要对员工说「映射」「现网」。失败码 → 中文只在插件 `hintZh` 写全（OA Redis 手册 **7.5**）；本文件只保留有独立排版的块。
+`prepare` 与 `submit_confirmed` 的身份未映射用同一块。回执若带 `hintZh` 且下面没有对应模板，原样输出 `hintZh`，不要贴英文 `message`。不要对员工说「映射」「现网」。失败码 → 中文只在插件 `hintZh` 写全（OA 桥接接入手册 **7.5**）；本文件只保留有独立排版的块。
 
 账号未开通提交权限（身份未映射码，含 `WECOM_IDENTITY_INVALID_SENDER`）：
 
@@ -828,7 +828,7 @@ Emoji 词表（一对一，不要混用）：`🛠️` 品牌；`📝` 已记下
 👤 处理人：郑鹏程
 ```
 
-其他明确失败（含 `PARAM_ERROR` / `OA_CREATE_REJECTED` / `HTTP_*` / `SYSTEM_NOT_ALLOWED` / `DRAFT_INVALID` / `HANDLER_NOT_CONFIGURED` / `ATTACHMENT_FIELD_NOT_CONFIGURED` / `REDIS_UNAVAILABLE` / `WORKFLOW_NOT_CREATEABLE` / `PREFLIGHT_FAILED`）：**优先原样输出 `hintZh`**（类型/系统对不上、OA 拒绝、缺处理人等已经是可行动中文，不要一律改成「请稍后重试」）；没有 `hintZh` 才用：
+其他明确失败（含 `PARAM_ERROR` / `OA_CREATE_REJECTED` / `HTTP_*` / `SYSTEM_NOT_ALLOWED` / `DRAFT_INVALID` / `HANDLER_NOT_CONFIGURED` / `ATTACHMENT_FIELD_NOT_CONFIGURED` / `DB_UNAVAILABLE` / `WORKFLOW_NOT_CREATEABLE` / `PREFLIGHT_FAILED`）：**优先原样输出 `hintZh`**（类型/系统对不上、OA 拒绝、缺处理人等已经是可行动中文，不要一律改成「请稍后重试」）；没有 `hintZh` 才用：
 
 ```text
 ❌ **确认准备失败**

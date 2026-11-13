@@ -243,7 +243,7 @@ agentDir   → /home/node/.openclaw/agents/itservicedeskagent/agent
 | `messaging` | 消息与会话相关工具 |
 | `full` | 不限制内置工具 |
 
-xA 使用 **`minimal` + alsoAllow**，只打开 `oa_workflow`。**不要**把 `read` 加入 `alsoAllow`：2026.9.2 现网在 Agent 级 `deny` 含 `group:fs`，热路径禁止读附件与规则文件；inbound 由插件自动暂存。不要把 `write` / `edit` / `memory_search` / `memory_get` / `message` / `wecom_mcp` 加入 `alsoAllow`。插件 `bridge-config.json` 须 `active=true` 才会真正建单。工单幂等由 Redis ledger 负责，不要让模型写本机台账。
+xA 使用 **`minimal` + alsoAllow**，只打开 `oa_workflow`。**不要**把 `read` 加入 `alsoAllow`：2026.9.2 现网在 Agent 级 `deny` 含 `group:fs`，热路径禁止读附件与规则文件；inbound 由插件自动暂存。不要把 `write` / `edit` / `memory_search` / `memory_get` / `message` / `wecom_mcp` 加入 `alsoAllow`。插件 `bridge-config.json` 须 `active=true` 才会真正建单。工单幂等由插件数据库台账负责，不要让模型写本机台账。
 
 全局必须关 `tools.media.image/audio/video.enabled`（三项都 `false`），并保持 catalog `input: ["text"]`。不要设 `agents.defaults.imageModel`：设了会给图片理解另一条自动探测路径。附件仍由企微通道落盘、`oa_workflow` 暂存。
 
@@ -297,12 +297,11 @@ plugins.allow / load.paths / entries.enabled
 | 包（插件 id） | 加载后登记了什么 | 模型要不要点名 |
 | --- | --- | --- |
 | `wecom-openclaw-plugin` | **通道** `wecom` + **工具** `wecom_mcp` + **Skill** `wecomcli-*` / `wecom-send-*` | 通道：不用 `alsoAllow`。`wecom_mcp`：写入才会被模型调用。Skill 目录：要 `agents.*.skills` 白名单放行才会进 prompt |
-| `oa-workflow-bridge-redis` | **只有工具** `oa_workflow`，没有通道 | 必须 `alsoAllow` 含 `oa_workflow`，否则 Agent 建不了单 |
-| `wecom-oa-identity-adapter` | 不 `registerTool`；桥接 `import` 它 | **不要**写入 `alsoAllow`，默认也不必出现在 `plugins.allow` |
+| `oa-workflow-bridge` | **只有工具** `oa_workflow`，没有通道 | 必须 `alsoAllow` 含 `oa_workflow`，否则 Agent 建不了单 |
 
-OA 桥接「最后也当工具用」：对模型暴露的入口就是 `oa_workflow`。它仍然先是插件——不进 `plugins.allow` / `load.paths`，Gateway 不会 `registerTool`，后面白名单写了也没用。HTTP、Redis、身份映射都在插件进程里跑，模型不能直调 Ecology。
+OA 桥接「最后也当工具用」：对模型暴露的入口就是 `oa_workflow`。它仍然先是插件——不进 `plugins.allow` / `load.paths`，Gateway 不会 `registerTool`，后面白名单写了也没用。HTTP、数据库、身份映射都在插件进程里跑，模型不能直调 Ecology。
 
-企微插件是「一个包、多种能力」。去掉 `alsoAllow` 里的 `wecom_mcp` **不会**关掉企业微信，也 **不会**自动去掉 `wecomcli-smartsheet` 等 Skill 目录。xA 热路径**不要**把 `message` / `write` / `edit` / `memory_*` / `read` 放进 `alsoAllow`；同时必须 `agents.defaults.skills: []`，否则 `/context detail` 仍会列出约 30 个 skill（现网曾占约 1 万字符）。工单正文由模型直接输出，通道负责发出；幂等看 Redis，不写本机台账。inbound 附件由插件自动暂存，不要用 `read` 看图或文档。
+企微插件是「一个包、多种能力」。去掉 `alsoAllow` 里的 `wecom_mcp` **不会**关掉企业微信，也 **不会**自动去掉 `wecomcli-smartsheet` 等 Skill 目录。xA 热路径**不要**把 `message` / `write` / `edit` / `memory_*` / `read` 放进 `alsoAllow`；同时必须 `agents.defaults.skills: []`，否则 `/context detail` 仍会列出约 30 个 skill（现网曾占约 1 万字符）。工单正文由模型直接输出，通道负责发出；幂等看插件数据库，不写本机台账。inbound 附件由插件自动暂存，不要用 `read` 看图或文档。
 
 ```text
 员工发消息
@@ -533,13 +532,13 @@ Gateway HTTP/WebSocket 服务与鉴权。同一端口复用：WebSocket 控制/R
 
 ```json
 "plugins": {
-  "allow": ["oa-workflow-bridge-redis", "wecom-openclaw-plugin"],
+  "allow": ["oa-workflow-bridge", "wecom-openclaw-plugin"],
   "deny": ["codex"],
   "load": {
-    "paths": ["/home/node/.openclaw/extensions/oa-workflow-bridge-redis"]
+    "paths": ["/home/node/.openclaw/extensions/oa-workflow-bridge"]
   },
   "entries": {
-    "oa-workflow-bridge-redis": { "enabled": true, "hooks": { "allowConversationAccess": true } },
+    "oa-workflow-bridge": { "enabled": true, "hooks": { "allowConversationAccess": true } },
     "wecom-openclaw-plugin": { "enabled": true, "hooks": { "allowConversationAccess": true } },
     "codex": { "enabled": false }
   }
@@ -549,9 +548,8 @@ Gateway HTTP/WebSocket 服务与鉴权。同一端口复用：WebSocket 控制/R
 | 插件 id | 注册能力 |
 | --- | --- |
 | `wecom-openclaw-plugin` | 通道 `wecom`、工具 `wecom_mcp` 等。须 `hooks.allowConversationAccess: true`，否则 `before_prompt_build` blocked，带图提单只靠 OA 桥接 hook 缓冲 |
-| `oa-workflow-bridge-redis` | 工具 `oa_workflow`。须 `hooks.allowConversationAccess: true`，否则收不到 `message_received`，带图提单只能靠工具 ctx 媒体路径 |
+| `oa-workflow-bridge` | 工具 `oa_workflow`。须 `hooks.allowConversationAccess: true`，否则收不到 `message_received`，带图提单只能靠工具 ctx 媒体路径 |
 | `codex` | 2026.9.2 现网 `deny` + `enabled: false`，不要打开 |
-| `wecom-oa-identity-adapter` | **无 tool。** 默认不进 `allow` / `load.paths`；桥接按相对路径 `import`。开关不在本文件，见 `OA_tool/身份适配器说明.md` 第 10 节 |
 
 npm/catalog 安装的企微插件 **不必** 出现在 `load.paths`。
 
@@ -739,7 +737,7 @@ MCP 工具以 `bundle-mcp` 或具体工具名出现在工具策略中。
 | 路径 | Docker 内为 `/home/node/.openclaw/...` |
 | `gateway.mode` | `local` |
 | `gateway.bind` | Docker 用 `lan` |
-| `plugins.allow` | 含 `oa-workflow-bridge-redis`、`wecom-openclaw-plugin` |
+| `plugins.allow` | 含 `oa-workflow-bridge`、`wecom-openclaw-plugin` |
 | `plugins.deny` | 含 `codex`；`entries.codex.enabled` 为 `false` |
 | `agents.entries` | 用对象 map，不要再用 `agents.list[]` |
 | `channels.wecom` | 凭据为 env 占位符，非明文 |
@@ -763,13 +761,13 @@ OpenClaw **2026.9.2** 现网核对：
 | Agent 结构 | `agents.entries`（不要 `list`）；`skipBootstrap: true`、`bootstrapMaxChars: 40000`、`skills: []` 写在 **defaults 和 `itservicedeskagent` 两处** |
 | 工具 | 两处 `alsoAllow` 仅 `oa_workflow`（不含 `read`）；Agent `deny` 含 `group:fs`；`tools.media` 全关 |
 | 模型 | Provider 键名现网为 `bailian`；`timeoutSeconds: 20`；catalog `input` 仅 `text`；`thinkingDefault: "off"` |
-| 插件 | `plugins.deny` 含 `codex`；**不要**写 bundled `skills.entries` 当全关；挡 skill 靠两处 `skills: []`。**不要**把 `wecom-oa-identity-adapter` 写入 `allow` / `alsoAllow` |
+| 插件 | `plugins.deny` 含 `codex`；**不要**写 bundled `skills.entries` 当全关；挡 skill 靠两处 `skills: []`。身份转换已并入 OA 桥接，没有单独插件 id |
 | 通道 | `sendThinkingMessage: true`（插件 ≥ 2026.7.2）；`controlUi.allowedOrigins` 已写 |
 | 会话 | `session.resetByType.group.idleMinutes: 30` |
 | 建单开关 | 不在本文件，在 `bridge-config.json` 的 `active`（规则包按 `true`） |
 | 工作区 | 规则在 `AGENTS.md` 的 `## Tools`，不再依赖自动注入 `TOOLS.md`。不要设 `agents.defaults.imageModel` |
 
-`wizard` 由 `doctor` 写入，不必手改。docker logs 若再出现 `smartsheet_get_records`，见 WeCom 手册 9.2。`prepare` 依赖两包 `node_modules/redis`（OA Redis 手册 4.2）。
+`wizard` 由 `doctor` 写入，不必手改。docker logs 若再出现 `smartsheet_get_records`，见 WeCom 手册 9.2。`prepare` 依赖桥接 `node_modules/mysql2` 等（OA 桥接接入手册 4.2）与可连的 MySQL。
 
 ---
 

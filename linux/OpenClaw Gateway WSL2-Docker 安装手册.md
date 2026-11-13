@@ -16,7 +16,7 @@
 | 安装位置示例 | `E:\WSL\Ubuntu-24.04` |
 | 宿主机工作目录 | `~/xa`（必须在 Linux 家目录，不要放 `/mnt/c` 等） |
 | 容器内用户 | `node`，uid `1000`，家目录 `/home/node` |
-| 镜像 | 默认 compose 为 `openclaw/openclaw:latest`（Docker Hub，可走国内加速）。方案 A 实际拉取的是 `ghcr.io/openclaw/openclaw:latest`，**须 `docker tag` 对齐**；若 yml 改成 ghcr 名或不 tag，本机不会有 `openclaw/openclaw`，装依赖用 OA Redis 接入手册 4.2 的「GHCR 名」整段，不要补拉 Docker Hub |
+| 镜像 | 默认 compose 为 `openclaw/openclaw:latest`（Docker Hub，可走国内加速）。方案 A 实际拉取的是 `ghcr.io/openclaw/openclaw:latest`，**须 `docker tag` 对齐**；若 yml 改成 ghcr 名或不 tag，本机不会有 `openclaw/openclaw`，装依赖用 OA 桥接接入手册 4.2 的「GHCR 名」整段，不要补拉 Docker Hub |
 | 网关端口 | 宿主 `18789` → 容器 `18789` |
 | OA | 保持停用，不要改 `active=true` |
 
@@ -851,7 +851,7 @@ docker logs -f --timestamps xa-gateway
 | `registry-1.docker.io` i/o timeout | 检查 `registry-mirrors`；yml 仍用 `openclaw/openclaw:latest` |
 | 加速源「免费节点繁忙」 | 第 7 节方案 A（GHCR 后 **必须 tag**）或方案 B（关加速 + dockerd 代理） |
 | 拉 `ghcr.io` 超时 | Windows VPN 未作用于 dockerd，用方案 B |
-| 第 4 节 / OA 手册 `npm install` 又在拉 `openclaw/openclaw:latest` | 本机镜像名是 `ghcr.io/openclaw/openclaw:latest`（方案 A 未 tag，或 yml 已改成 ghcr）。`docker images` 没有 `openclaw/openclaw` 时不要去 Docker Hub 补拉。用 OA Redis 接入手册 4.2 的「GHCR 名」整段，或先 `docker tag` |
+| 第 4 节 / OA 手册 `npm install` 又在拉 `openclaw/openclaw:latest` | 本机镜像名是 `ghcr.io/openclaw/openclaw:latest`（方案 A 未 tag，或 yml 已改成 ghcr）。`docker images` 没有 `openclaw/openclaw` 时不要去 Docker Hub 补拉。用 OA 桥接接入手册 4.2 的「GHCR 名」整段，或先 `docker tag` |
 | `docker images` 没有 `openclaw/openclaw` / `compose ps` IMAGE 是 ghcr | 不是缺镜像。Gateway 已在用 GHCR 名。装依赖见 OA 桥接接入手册 4.2 |
 | `gateway.bind` 校验失败、容器重启 | `--bind` / json 里只能用 `lan`、`loopback`、`auto`、`tailnet`，不要写 IP |
 | Permission denied 读写挂载目录 | `sudo chown -R 1000:1000 ~/xa` |

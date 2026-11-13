@@ -435,11 +435,7 @@ chmod 700 ~/xa/secrets
 
 REPO="$HOME/handoff/xa"
 
-cp -r "$REPO/openclaw/workspace-rules/." ~/xa/workspace/
-cp "$REPO/openclaw/MAPPING_RULES.md" "$REPO/openclaw/ROUTING_RULES.md" \
-   "$REPO/openclaw/REGION_MAPPING.md" "$REPO/openclaw/TICKET_SCHEMA.md" \
-   "$REPO/openclaw/TICKET_STATUS_BANNER.md" "$REPO/openclaw/OA_WORKFLOW_CONTRACT.md" \
-   ~/xa/workspace/
+cp -r "$REPO/workspace-rules/workspace/." ~/xa/workspace/
 
 test -f ~/xa/workspace/MEMORY.md || printf '%s\n' '# MEMORY' > ~/xa/workspace/MEMORY.md
 ls -la ~/xa/config ~/xa/workspace ~/xa/extensions ~/xa/secrets
