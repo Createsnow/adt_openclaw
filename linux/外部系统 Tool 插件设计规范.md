@@ -49,10 +49,10 @@ sessionKey 或 sessionId = 当前会话标识
 ### 1.4 两阶段确认
 
 1. Agent 整理结构化 `draft` → `prepare`（不写外部系统）
-2. 向员工发待确认正文：头行 `📋 **当前工单**`，回显问题、地点、附件件数；工单信息与 `---` 之间写补充引导句（无附件「内容不对或还缺信息，直接再写一句，或发图片、文档。」；有附件「还可以继续改文字，或再发图片、文档。」）。不要写「请确认后提交」，不要 24 小时，不要写成 `3. 补充`，不要问「是否还需要补充」，不要写工单类型 / 所属系统，不要状态卡。地点只抄回执 `location`。员工可见两句口令：`**请回复**` + `1. 确认提交` / `2. 取消`（问题 / 地点 / 附件下一行是补充引导句，再空行 `---`，到 `2. 取消` 结束；`---` 与 `**` 都不要省）。补充不必打「补充：」，直接发图片 / 文件或再写一句即可。附件回执按图片 / 文档分别报累计件数。
+2. 向员工发待确认正文：插件在回执 `replyZh` 里拼好确认卡（问题、地点、附件件数，`1. 确认提交` / `2. 取消`），模型原样转发，不自己套模板。员工可见文案由插件定，提示词里不教格式。
 3. 原提交人回复后：
    - `确认提交`（或 `1` / `1.` / `1. 确认提交`）：`submit_confirmed` **只带** `confirmationId`，不要带 `supplement`
-   - 确认前改稿：直接再写一句新事实即可（`补充：` 可选）；插件**不会**把 `supplement` 写入 pending 当改稿，必须 `cancel` 再 `prepare`
+   - 确认前改稿：员工再写一句新事实，模型合并描述后再 `prepare`；插件作废旧单、带上旧单附件（不用 `supplement` 改稿）
    - 只发图片 / 文件：`attach`，不必打「补充：」
    - `active=true` 时：员工若把「补充：…」当作确认提交口令发出，该次内容才作为 `supplement` 一次建单；规则包要求确认提交不带 supplement
    - 明确取消（或 `2` / `2.取消`）：`cancel`
@@ -64,7 +64,7 @@ sessionKey 或 sessionId = 当前会话标识
 | 场景 | 处理 |
 | --- | --- |
 | 同一外部工单号已 submitted | `ALREADY_SUBMITTED` |
-| 已有 awaiting_confirmation | `ALREADY_PENDING`（同一人全局一张，跨会话也算） |
+| 已有 awaiting_confirmation | 新 `prepare` 替换旧单（同一人同时只有一张）；提交中 / 待对账的单挡住新单 |
 | 同一 confirmationId 并发 confirm | 同进程串行，最多调用一次外部系统 |
 | 超过确认窗口 | `CONFIRMATION_EXPIRED`；pending 仍在，可 cancel |
 | 本机附件暂存丢失 | `STAGING_MISSING`，不调 OA |
@@ -77,7 +77,7 @@ sessionKey 或 sessionId = 当前会话标识
 
 禁止写入日志或状态：AppSecret、token、RSA 密文、原始 SenderId / 人员资源 ID 明文、附件 base64、完整工单正文。
 
-不要把密钥写入 `openclaw.json` 明文。Docker 走 Compose secrets → entrypoint 环境变量；本插件 `oa-client.mjs` **只读**环境变量 `OA_API_USER_ID` / `OA_APP_SECRET`，不回退 DPAPI、不读映射目录。身份映射权威是 `oa_identity` 缓存。miss 路径是 **身份适配器**（独立包已验证，不注册模型 tool），不要做成「模型可调任意 URL」的通用 HTTP 工具；设计见 `OA_tool/身份适配器说明.md`。
+不要把密钥写入 `openclaw.json` 明文。Docker 走 Compose secrets → entrypoint 环境变量；本插件 `oa-client.mjs` **只读**环境变量 `OA_API_USER_ID` / `OA_APP_SECRET`，不回退 DPAPI、不读映射目录。身份映射权威是 `oa_identity` 缓存。miss 路径是 **身份适配器**（独立包已验证，不注册模型 tool），不要做成「模型可调任意 URL」的通用 HTTP 工具；设计见 `OA_tool/企微到OA身份.md` 第 9 节。
 
 ---
 
@@ -101,7 +101,7 @@ oa-workflow-bridge（工具 oa_workflow）
    Ecology OA（流程 602）
 ```
 
-身份（`adapter=on` + `oa_identity` 缓存，**已验证**）由桥接内 `src/identity/` 完成：`user/get`（回退 `openuserid_to_userid`）→ 对齐工号 → `getHrmUserInfoWithPage` → 写回 `idmap`。适配器是 Gateway 进程内包，不是单独服务器，**不是** 模型可调 tool，也不把企微 / **用工号点查** 塞进 `oa-client.mjs`。提交前部门 / 岗位 / 地点由桥接 `hrm-profile.mjs` 调 `getHrmSimpleInfo`。见 `OA_tool/身份适配器说明.md` 与 `xA 现网加固与演进全景.md` 第 7 节。
+身份（`adapter=on` + `oa_identity` 缓存，**已验证**）由桥接内 `src/identity/` 完成：`user/get`（回退 `openuserid_to_userid`）→ 对齐工号 → `getHrmUserInfoWithPage` → 写回 `idmap`。适配器是 Gateway 进程内包，不是单独服务器，**不是** 模型可调 tool，也不把企微 / **用工号点查** 塞进 `oa-client.mjs`。提交前部门 / 岗位 / 地点由桥接 `hrm-profile.mjs` 调 `getHrmSimpleInfo`。见 `OA_tool/企微到OA身份.md` 第 9 节 与 `xA 现网加固与演进全景.md` 第 7 节。
 
 | 模型负责 | 插件负责 |
 | --- | --- |
@@ -149,10 +149,8 @@ Agent 侧：即使插件已 loaded，也必须把 `oa_workflow` 加入 `tools.al
 | --- | --- |
 | `xA 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
 | `OA_tool/OA Workflow Bridge 接入手册.md` | OA 桥接架构、表结构、接入、工具 API（生产主路径） |
-| `OA_tool/企微到OA身份与数据流.md` | 三种身份、`oa_identity` 缓存 |
-| `OA_tool/身份适配器说明.md` | 转换层（独立包已验证） |
+| `OA_tool/企微到OA身份.md` | 三种身份、身份转换、`oa_identity` 缓存 |
 | `MySQL 数据库准备.md` | 独立 MySQL：建库、账号、网络、备份 |
-| `OpenClaw Gateway WSL2-Docker 安装手册.md` | WSL2 + Docker Gateway 全链路 |
 | `WeCom 通道插件接入手册.md` | 企微通道与 wecom_mcp |
 | `OpenClaw Gateway Docker 运维手册.md` | 日常启停、备份、巡检 |
 | `OA_tool/Ecology 流程创建 API 说明.md` 与本手册 | OA 接口与恢复顺序 |

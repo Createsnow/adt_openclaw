@@ -159,7 +159,7 @@ openclaw --profile ops gateway install --port 19789
 
 **推荐：A（Compose + `~/xa`）**
 
-- 与 `OpenClaw Gateway WSL2-Docker 安装手册.md` 完全一致
+- 与 `OpenClaw Gateway Linux 服务器安装手册.md` 的 Docker 步骤一致
 - secrets、entrypoint、企微插件流程已验证
 - 一个容器、一个目录、一个端口，运维最简单
 
@@ -385,7 +385,6 @@ Dashboard：`http://localhost:18790/`，token 用 `cat ~/xa-hr/secrets/gateway_t
 | 文档 | 内容 |
 | --- | --- |
 | `xA 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
-| `OpenClaw Gateway WSL2-Docker 安装手册.md` | 工位 WSL2 + Docker 全链路部署 |
 | `OpenClaw Gateway Linux 服务器安装手册.md` | 内网 Linux 服务器 / VM 安装（独立完整路径） |
 | `OpenClaw Gateway Docker 运维手册.md` | 启停、巡检、备份、升级回滚、三层排障 |
 | `WeCom 通道插件接入手册.md` | 企微插件配置与排错 |

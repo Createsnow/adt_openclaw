@@ -96,13 +96,13 @@
 
 本文讲的是 **装完之后怎么养**：日常启停、巡检、备份、升级、排障。不替代安装手册里的安装步骤。
 
-安装检查清单看对应安装手册（WSL 第 10 节 / Linux 第 23 节）；**装完之后怎么养**看本文。
+安装检查清单看 Linux 服务器安装手册第 23 节；**装完之后怎么养**看本文。
 
 <a id="audience" name="audience"></a>
 
 ### 适用对象与边界
 
-适用对象：已按 **[OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md)** 或 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md)** 跑通 xA OpenClaw Gateway，需要做日常启停、巡检、备份、升级、排障的工程师。
+适用对象：已按 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md)** 跑通 xA OpenClaw Gateway，需要做日常启停、巡检、备份、升级、排障的工程师。
 
 - **做：** 容器启停、健康检查、日志、巡检、备份恢复、密钥轮换、镜像/插件升级、磁盘与自愈、三层排障。
 - **不做：** 第一次部署、重装、换机器。那些走安装检查清单，不要用本文巡检清单代替。
@@ -121,7 +121,7 @@ Linux 服务器环境**跳过**以下 WSL / Windows 专属小节：
 | [11.2](#sec-11-2) | Windows 任务计划 | 用 systemd / cron |
 | [11.3](#sec-11-3) | Windows 睡眠 | 服务器不休眠 |
 
-安装检查清单：WSL 看 WSL2 手册第 10 节，服务器看 Linux 服务器手册第 23 节。
+安装检查清单看 Linux 服务器手册第 23 节。
 
 <a id="defaults" name="defaults"></a>
 
@@ -133,7 +133,7 @@ Linux 服务器环境**跳过**以下 WSL / Windows 专属小节：
 | --- | --- |
 | 工作目录 | `~/xa`（必须在 Linux 家目录，不要放 `/mnt/c`） |
 | 容器名 | `xa-gateway` |
-| 镜像 | 默认 `openclaw/openclaw:latest`。本机若只有 `ghcr.io/openclaw/openclaw:latest`（安装手册方案 A 未 tag，或 yml 已写 ghcr），装依赖与 `image inspect` 都用那一串；`docker images` 没有 `openclaw/openclaw` 时不要去 Docker Hub 补拉。完整命令见 OA 桥接接入手册 4.2。生产建议钉版本，见 [第 8 节](#sec-08) |
+| 镜像 | 自建 `xa-gateway-oa:2026.9.2`（官方 OpenClaw + OA 桥接插件与依赖，`docker/Dockerfile`，见 OA 桥接接入手册 4.2）。OA 插件在镜像的 `/opt/xa/oa-workflow-bridge`，不在 `~/xa/extensions` |
 | 网关端口 | 宿主 `18789` → 容器 `18789` |
 | 健康检查 URL | `http://127.0.0.1:18789/healthz` |
 | 容器内 CLI | `docker exec -it xa-gateway node dist/index.js <子命令>` |
@@ -184,7 +184,7 @@ Linux 服务器环境**跳过**以下 WSL / Windows 专属小节：
 
 | 清单 | 何时用 | 在哪 |
 | --- | --- | --- |
-| **安装检查清单** | 第一次部署、重装、换机器 | WSL2 手册第 10 节 / Linux 服务器手册第 23 节、企微/百炼各自文档末尾 |
+| **安装检查清单** | 第一次部署、重装、换机器 | Linux 服务器手册第 23 节、企微/百炼各自文档末尾 |
 | **运维巡检清单** | 已经在跑，每天/每周/每月保养 | [本文第 5 节](#sec-05) |
 
 不要用安装清单代替巡检。安装清单通过只说明「当时装对了」，不说明「现在还健康」。
@@ -504,11 +504,11 @@ docker logs --since 24h xa-gateway 2>&1 | grep -E 'MEMORY.md|ENOENT'
 # 模型找不到 / 占位符没注入
 docker logs xa-gateway 2>&1 | grep -Ei 'Unknown model|unresolved|model_not_found|Missing env var'
 
-# OA 插件缺 npm 依赖（prepare 会失败，错误在 docker logs）
-docker logs --since 1h xa-gateway 2>&1 | grep -E "Cannot find (package|module) '(mysql2|jpeg-js|pngjs)'|MySQL init failed"
+# OA 插件没加载 / 连不上库（镜像不对或 MySQL 不通）
+docker logs --since 1h xa-gateway 2>&1 | grep -E "Cannot find (package|module)|plugin path not found|MySQL init failed"
 ```
 
-`oa_workflow` 的 `OA_IDENTITY_*` **不会**出现在 `docker logs`。员工说「还不能提交到 OA」时，到会话 jsonl 抽工具 `code`，完整命令见 `OA_tool/身份适配器说明.md` 第 9 节。不要 `cat` 整份 jsonl（含加密 userid）。
+`oa_workflow` 的 `OA_IDENTITY_*` **不会**出现在 `docker logs`。员工说「还不能提交到 OA」时，到会话 jsonl 抽工具 `code`，完整命令见 `OA_tool/企微到OA身份.md` 9.9 节。不要 `cat` 整份 jsonl（含加密 userid）。
 
 <a id="sec-04-3" name="sec-04-3"></a>
 
@@ -631,11 +631,11 @@ SELECT status, COUNT(*) FROM xa_oa.oa_ticket GROUP BY status;
 
 | 必须备份 | 可以不备份（能重建） |
 | --- | --- |
-| `~/xa/config/`（尤其 `openclaw.json`） | `openclaw/openclaw` 镜像（可再 `pull`） |
+| `~/xa/config/`（尤其 `openclaw.json`） | `xa-gateway-oa` 镜像（按 OA 桥接接入手册 4.2 重建） |
 | `~/xa/workspace/` | 正在跑的容器 |
-| `~/xa/secrets/` | 能从 npm / 本仓库重装的插件源码 |
+| `~/xa/secrets/` | 企微插件（能从 npm 重装）、OA 插件源码（在本仓库与镜像里） |
 | `~/xa/docker-compose.yml`、`entrypoint.sh` | — |
-| `~/xa/extensions/*/bridge-config.json` 等本地改过的配置 | 未改过的插件源码（`node_modules` 可按 OA 桥接接入手册 4.2 用官方镜像重装） |
+| `~/xa/oa-bridge-config.json`（OA 桥接现网配置） | — |
 | OA 状态库 `xa_oa`（独立 MySQL 机器，按 [MySQL 数据库准备.md](MySQL%20数据库准备.md) 第 5 节 `mysqldump`） | — |
 
 **不要**把含 `secrets/` 的备份传到公共网盘、不要提交 git。备份文件权限应是 `600`，只放在本机或企业加密盘。
@@ -664,6 +664,7 @@ tar --exclude='xa/extensions/*/node_modules' \
     xa/config \
     xa/workspace \
     xa/secrets \
+    xa/oa-bridge-config.json \
     xa/extensions
 
 chmod 600 "${BACKUP_DIR}/xa-${STAMP}.tar.gz"
@@ -715,17 +716,9 @@ sudo chown -R 1000:1000 "${HOME}/xa"
 chmod 600 "${HOME}/xa/secrets/"*.txt
 chmod 755 "${HOME}/xa/entrypoint.sh"
 
-# 备份排除了 node_modules；按 OA 桥接接入手册 4.2 用官方镜像重装后再 up。
-# 镜像名以 docker compose ps 的 IMAGE 列、以及 ~/xa/docker-compose.yml 的 image: 为准。
-# 本机没有 openclaw/openclaw、只有 ghcr.io/openclaw/openclaw:latest 时：
-# 把下面最后一行镜像名换成那一串，不要 docker pull openclaw/openclaw:latest。
-docker run --rm --user 1000:1000 \
-  -e HOME=/tmp \
-  -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "${HOME}/xa/extensions/oa-workflow-bridge:/app" \
-  -w /app \
-  openclaw/openclaw:latest \
-  npm install --omit=dev
+# OA 插件和依赖在镜像里，不在备份里。换机器 / 镜像丢了时，先在仓库 linux/ 下重建：
+#   docker build -f docker/Dockerfile -t xa-gateway-oa:2026.9.2 .
+docker images | grep xa-gateway-oa
 
 cd ~/xa
 docker compose up -d
@@ -868,7 +861,7 @@ docker exec -it xa-gateway node dist/index.js plugins list
 
 ### 8.2 升级 OpenClaw 镜像
 
-生产建议把 `docker-compose.yml` 里的 `image: openclaw/openclaw:latest` 改成具体版本或 digest，避免同 tag 内容被换掉。仍用 `latest` 时，按下面做，并记下升级前 digest。
+现网跑的是自建镜像 `xa-gateway-oa`。升级 OpenClaw = 改仓库 `docker/Dockerfile` 的 `FROM`（或 `--build-arg OPENCLAW_IMAGE=`）、换一个新 tag 重新构建、改 compose 的 `image:`，再按下面第 4 步起切换；旧 tag 留着就是回滚点。下面 `docker compose pull` 那一步对自建镜像不适用。
 
 ```bash
 cd ~/xa
@@ -922,7 +915,7 @@ docker compose up -d
 curl -sS http://127.0.0.1:18789/healthz; echo
 ```
 
-更稳妥：yml 使用固定 tag（例如 `openclaw/openclaw:2026.7.1`），回滚就是改回旧 tag 再 `up -d`。
+更稳妥：每次构建用新 tag（例如 `xa-gateway-oa:2026.9.2`），回滚就是把 compose 的 `image:` 改回旧 tag 再 `down && up`。
 
 配置已被 `doctor --fix` 改坏时：不要只回滚镜像，按[第 6.3 节](#sec-06-3)把 `config/` 一起恢复。
 
@@ -983,7 +976,9 @@ docker logs -f --timestamps xa-gateway
 | secret 文件内容 | 要 down/up | 同上 |
 | compose / entrypoint | 要 down/up | 同上 |
 | workspace 规则文件（`AGENTS.md` 等） | 一般不用重启 | 下一轮对话生效；异常再 restart |
-| 扩展目录里新拷插件 | 要 down/up | 先 `sudo chown -R 1000:1000 ~/xa/extensions`；OA 桥接插件还须按接入手册 **4.2** 用官方镜像装依赖，再 `down && up` |
+| 扩展目录里新拷插件 | 要 down/up | 先 `sudo chown -R 1000:1000 ~/xa/extensions`，再 `down && up` |
+| OA 插件代码 / `systems.json` | 要重建镜像 + down/up | 按 OA 桥接接入手册 **4.2** `docker build`，再 `down && up` |
+| `~/xa/oa-bridge-config.json` | 要 down/up | 只读挂载，不必重建镜像 |
 
 改完 json 先校验再重启：
 
@@ -1142,7 +1137,7 @@ readlink -f ~/xa
 | `~/xa/config/media/inbound` | `/home/node/.openclaw/media/inbound` | 桥接允许根之一（`stateDir/media/inbound`） |
 | `~/xa/workspace/media/inbound` | `/home/node/.openclaw/workspace/media/inbound` | 通道落盘；桥接同样允许拷进 staging。模型禁止 `read` |
 
-待确认窗口默认 24 小时；同一会话改稿（`cancel` 再 `prepare`）还可能回读未满 24 小时的原件。因此只删 **满 1440 分钟** 的文件。用 `-mmin +1440`，不要用 `-mtime +1`（GNU find 常变成满两天才匹配）。
+待确认窗口默认 24 小时；插件收到附件时已拷进自己的 staging，不再回读原件，但为稳妥仍只删满 24 小时的原件。因此只删 **满 1440 分钟** 的文件。用 `-mmin +1440`，不要用 `-mtime +1`（GNU find 常变成满两天才匹配）。
 
 先确认是两份还是符号链接：
 
@@ -1444,7 +1439,7 @@ Windows 开了 VPN **不等于** WSL 里的 dockerd 走 VPN。拉镜像失败用
 | 现象 | 命令 | 处理 |
 | --- | --- | --- |
 | `Cannot connect to the Docker daemon` | `systemctl is-active docker` | `sudo systemctl start docker`；组权限：`groups` 含 `docker`，否则 `wsl --shutdown` 后重进 |
-| 容器 `Restarting` (78) | `docker logs --tail 120 xa-gateway` | 按日志修 json（删 `meta`、去 wecom、补 `name`、OA 路径改成 `oa-workflow-bridge`），再 `down && up` |
+| 容器 `Restarting` (78) | `docker logs --tail 120 xa-gateway` | 按日志修 json（删 `meta`、去 wecom、补 `name`、OA 路径改成 `/opt/xa/oa-workflow-bridge`），再 `down && up` |
 | `docker exec` 进不去 | `docker compose ps` | 先让容器 `Up`，不要在 Restarting 时 exec |
 | 权限 denied 挂载目录 | `ls -ln ~/xa` | `sudo chown -R 1000:1000 ~/xa` |
 | 读 `/run/secrets` Permission denied | `stat ~/xa/secrets/*` | 适当放宽文件「其他用户可读」，或核对 `user: "1000:1000"` |
@@ -1469,25 +1464,25 @@ docker logs --tail 80 --timestamps xa-gateway
 | `/healthz` 不通但容器 Up | [第 3.3](#sec-03-3)、[3.5](#sec-03-5) 节 | `bind` 必须是 `lan`；entrypoint 与 json 一致 |
 | `meta: Invalid input` | `grep -n meta ~/xa/config/openclaw.json` | 安装手册 5.0，只删 `handoffTemplate` 等非法键 |
 | `plugin path not found` / `unknown channel id: wecom` | `ls ~/xa/extensions` | 安装手册 5.5 或企微指南 |
-| `plugin path not found: .../oa-workflow-bridge-redis` | `ls ~/xa/extensions` | 路径改成 `oa-workflow-bridge`（OA 桥接接入手册 5.1）；旧 id `oa-workflow-bridge-redis` / `wecom-oa-identity-adapter` 不要留 |
+| `plugin path not found: .../oa-workflow-bridge-redis` 或 `/opt/xa/oa-workflow-bridge` | `docker inspect -f '{{.Config.Image}}' xa-gateway` | 镜像须是 `xa-gateway-oa`；`load.paths` 只写 `/opt/xa/oa-workflow-bridge`（OA 桥接接入手册 5.1）；旧 id `oa-workflow-bridge-redis` / `wecom-oa-identity-adapter` 不要留 |
 | Gateway Up 但 `autostart suppressed` | [第 3.5 节](#sec-03-5)日志 | **[第 11.4 节](#sec-11-4)** RPC 覆盖或等 5 分钟；不要 `channels start --channel` |
 | 企微收不到 | [第 3.4 节](#sec-03-4) channels + [第 4.2 节](#sec-04-2) wecom grep | 企微指南第 13 节；`allowFrom` 测试环境含 `"*"` |
 | 发出去很久才回 | [第 4.2 节](#sec-04-2) `model-fetch` / `kind=final` | 百炼指南 §2.4、§6.7；企微指南 7.4 |
 | `Unknown model` / unresolved | `cat ~/xa/secrets/model_ref.txt; echo` | 前缀必须等于 json 里 `providers` 键名 |
 | `docker exec` 报 Missing env var | — | 可忽略，或用[第 3.4 节](#sec-03-4)带 `-e` 的命令 |
 | OA 预检失败 | 见下方 | `DB_UNAVAILABLE` / `DB_SCHEMA_MISSING` 查 MySQL；其余是 OA 凭据或依赖，见 OA 桥接接入手册 8.2 / 10 |
-| 员工「确认准备失败」/ 日志 `Cannot find package 'mysql2'` 或 `MySQL init failed` | `ls ~/xa/extensions/oa-workflow-bridge/node_modules/mysql2` | 缺包按 OA 桥接接入手册 4.2 重装；连库失败按该手册第 10 节，再 `down && up` |
+| 员工「确认准备失败」/ 日志 `Cannot find package 'mysql2'` 或 `MySQL init failed` | `docker inspect -f '{{.Config.Image}}' xa-gateway` | 缺包说明没用自建镜像，按 OA 桥接接入手册 4.2 重建；连库失败按该手册第 10 节，再 `down && up` |
 | docker logs 出现 `smartsheet_get_records` | `grep alsoAllow ~/xa/config/openclaw.json` | WeCom 手册 9.2；现网旁路已清。不要为 OA 去重新授权文档 |
-| 员工「还不能提交到 OA」/ `OA_IDENTITY_NOT_CONFIGURED` | `docker logs` grep 不到该码是预期 | 身份适配器说明第 9 节：先看 `WECOM_IDENTITY_FILES_OK` / `INJECTED`，再抽会话 jsonl |
+| 员工「还不能提交到 OA」/ `OA_IDENTITY_NOT_CONFIGURED` | `docker logs` grep 不到该码是预期 | 企微到OA身份 9.9 节：先看 `WECOM_IDENTITY_FILES_OK` / `INJECTED`，再抽会话 jsonl |
 | 员工「OA 需要人工核对」/ `RECONCILIATION_REQUIRED` | `oa_ticket.status` 为 `unknown` 或卡在 `submitting` | **[第 12.5 节](#sec-12-5)** 对账；禁止再点确认 |
 
 OA 只读预检（**不会建单**）：
 
 ```bash
-docker exec -it xa-gateway sh -c 'export OA_MYSQL_PASSWORD="$(tr -d "\n" < /run/secrets/oa_mysql_password)" OA_API_USER_ID="$(tr -d "\n" < /run/secrets/oa_api_user_id)" OA_APP_SECRET="$(tr -d "\n" < /run/secrets/oa_app_secret)"; node /home/node/.openclaw/extensions/oa-workflow-bridge/scripts/readonly-preflight.mjs'
+docker exec -it xa-gateway sh -c 'export OA_MYSQL_PASSWORD="$(tr -d "\n" < /run/secrets/oa_mysql_password)" OA_API_USER_ID="$(tr -d "\n" < /run/secrets/oa_api_user_id)" OA_APP_SECRET="$(tr -d "\n" < /run/secrets/oa_app_secret)"; node /opt/xa/oa-workflow-bridge/scripts/readonly-preflight.mjs'
 ```
 
-规则包已把 `oa_workflow` 加入 `tools.alsoAllow`（全局与 Agent 两处须一致），**不要**加入 `wecom_mcp`。现网是否调用 `doCreateRequest` 看实际加载的 `bridge-config.json`；接入核对见 OA 桥接接入手册第 5 / 8 节。不要移出白名单。不要把 `OA_BRIDGE_INACTIVE` 当成已建单。员工「确认准备失败」时，若日志有 `Cannot find package 'mysql2'` / `MySQL init failed` 再按 OA 桥接接入手册 4.2 / 第 10 节处理；不要先当 OA 接口故障。
+规则包已把 `oa_workflow` 加入 `tools.alsoAllow`（全局与 Agent 两处须一致），**不要**加入 `wecom_mcp`。现网是否调用 `doCreateRequest` 看实际加载的 `bridge-config.json`；接入核对见 OA 桥接接入手册第 5 / 8 节。不要移出白名单。不要把 `OA_BRIDGE_INACTIVE` 当成已建单。员工「确认准备失败」时，若日志有 `Cannot find package 'mysql2'` / `MySQL init failed` 再按 OA 桥接接入手册 4.2（重建镜像）/ 第 10 节处理；不要先当 OA 接口故障。
 
 <a id="sec-12-4" name="sec-12-4"></a>
 
@@ -1508,7 +1503,7 @@ docker compose ps
 docker logs --tail 80 --timestamps xa-gateway
 ```
 
-日志是 `plugin path not found: .../oa-workflow-bridge-redis`：json 的 allow / paths / entries 改成 `oa-workflow-bridge`（见 OA 桥接接入手册 5.1），再 `up -d`。`Restarting` 时不要 `docker exec`。
+日志是 `plugin path not found: .../oa-workflow-bridge-redis`：json 的 allow / entries 改成 `oa-workflow-bridge`、paths 改成 `/opt/xa/oa-workflow-bridge`（见 OA 桥接接入手册 5.1），确认 compose 用 `xa-gateway-oa` 镜像，再 `up -d`。`Restarting` 时不要 `docker exec`。
 
 <a id="sec-12-4-b" name="sec-12-4-b"></a>
 
@@ -1832,7 +1827,6 @@ Windows 防火墙：若必须让局域网访问 `18789`，只放行可信网段�
 | 文档 | 何时去看 |
 | --- | --- |
 | [xA 现网加固与演进全景.md](xA 现网加固与演进全景.md) | OA 主路径、切入范围、各层 I/O |
-| [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw Gateway WSL2-Docker 安装手册.md) | 工位 WSL2 安装、secrets 契约、拉镜像方案 A/B、容量扩展（不要复制同 Bot） |
 | [OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md) | 内网 Linux 服务器安装；防火墙 / SSH 隧道；方案 B 用服务器自己的代理 |
 | [WeCom 通道插件接入手册.md](WeCom 通道插件接入手册.md) | 通道、allowFrom、思考中占位、插件升级 |
 | [DashScope 兼容 Provider 配置手册.md](DashScope 兼容 Provider 配置手册.md) | 慢回复、`thinkingFormat`、`MEMORY.md`、crash-loop |

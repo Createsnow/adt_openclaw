@@ -1,10 +1,10 @@
-# 企微到 OA：身份、数据流与映射方案
+# 企微到 OA：身份与数据流
 
 适用对象：已经拿到 OA 应用凭据、准备把 xA 工单接到 Ecology 流程 602 的工程师。
 
 部署命令、Compose、entrypoint、错误码以 [OA Workflow Bridge 接入手册.md](OA%20Workflow%20Bridge%20接入手册.md) 为准，本文不重复操作步骤。Ecology HTTP 细节见 [Ecology 流程创建 API 说明.md](Ecology%20流程创建%20API%20说明.md)。企微安装仍以 [../WeCom 通道插件接入手册.md](../WeCom%20通道插件接入手册.md) 为准。
 
-**本文只讲：** 谁是调用者、谁是申请人、通道回传了什么、工号怎么变成人员 id、身份如何进 `oa_identity` 缓存。身份转换的接口、失败码与凭据只在 [身份适配器说明.md](身份适配器说明.md) 写全。
+**本文只讲：** 谁是调用者、谁是申请人、通道回传了什么、工号怎么变成人员 id、身份如何进 `oa_identity` 缓存。身份转换的接口、失败码与凭据只在 第 9 节 写全。
 
 ---
 
@@ -18,7 +18,7 @@
 | Agent 工具白名单 | **已**加入 `oa_workflow`；**不要**加入 `wecom_mcp` |
 | 员工可见口径 | 只有 `SUBMITTED` + 数字 `requestId` 才能说已创建 OA |
 | 身份映射 | MySQL `oa_identity` 缓存（`identity.adapter=on`），miss 时插件内身份转换现查。已验证通过 |
-| 身份转换 | 插件内 `src/identity/`（原独立包已并入）；设计见 [身份适配器说明.md](身份适配器说明.md) |
+| 身份转换 | 插件内 `src/identity/`（原独立包已并入）；设计见 第 9 节 |
 
 不要再把智能表格当作规则源或台账。
 
@@ -187,14 +187,7 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 
 ### 5.6 主路径：`oa_workflow`
 
-| action | 输入 | 输出 | 写库 | 调 OA |
-| --- | --- | --- | --- | --- |
-| `prepare` | 可信 wecom 上下文 + draft；inbound 附件由插件自动暂存 | `confirmationId`；未查到人员则 `OA_IDENTITY_NOT_FOUND` 等；已有待确认则 `ALREADY_PENDING` | 成功才插入 `oa_ticket`；身份未解析**不写** | 否（身份 miss 时查企微/人事） |
-| `attach` | 本轮 inbound / 本地路径；可不带 `confirmationId` | 同一会话补图 → `ATTACHED`；尚未 prepare → `BUFFERED`（写 `oa_inbox`）；跨会话已有待确认 → `ALREADY_PENDING` | 同一会话追加本单附件清单，或写 `oa_inbox`。不改状态 | 否 |
-| `submit_confirmed` | 原发送人、`confirmationId`（跨会话也可） | `SUBMITTED` + 数字 `requestId`；若 `active=false` 则 `OA_BRIDGE_INACTIVE` | `active=true` 才改状态 | 是（仅 `active=true`）：先认证 `getHrmSimpleInfo`，再 `doCreateRequest` |
-| `status` / `cancel` | 原发送人；`status` 可不带 `confirmationId` | `PERSON_STATUS` / 点查结果；只能取消仍存在的 pending | status 只读（到期单记 expired）；cancel 记 cancelled 并清资料 | 否 |
-
-同一 `confirmationId` 仅原发送人可确认（跨 `/new` 按人认，不要求原会话）。员工回复「确认提交」（或 `1`）走 `submit_confirmed`；只发附件走 `attach`（不必打「补充：」）；确认前改稿走 `cancel` 再 `prepare`；明确取消（或 `2`）走 `cancel`。跨会话不能补附件，只能确认或取消。
+五个 action（`prepare` / `attach` / `submit_confirmed` / `status` / `cancel`）的契约、替换旧单与 `replyZh` 见 [OA Workflow Bridge 接入手册.md](OA%20Workflow%20Bridge%20接入手册.md) 第 7 节。与身份相关的只有两点：`prepare` 时才查申请人（查不到不建单）；确认只认原发送人，不要求原对话。
 
 ### 5.7 插件 → Ecology
 
@@ -260,11 +253,11 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 
 ## 8. 落地清单（不改插件的前提下）
 
-1. 把管理员给的 **appid** 写入实际加载的 `~/xa/extensions/oa-workflow-bridge/bridge-config.json`（不要写进 `oa_api_user_id.txt`）。规则包按 `active=true`；现网是否调用 `doCreateRequest` 看该文件。
+1. 把管理员给的 **appid** 写入实际加载的 `~/xa/oa-bridge-config.json`（不要写进 `oa_api_user_id.txt`）。规则包按 `active=true`；现网是否调用 `doCreateRequest` 看该文件。
 2. **AppSecret** 写入 `~/xa/secrets/oa_app_secret.txt`（`printf`、chmod 600、uid 1000）。不要提交 git、不要贴到群聊。
 3. **接口账号人员 id**：已知该账号工号时，按 Ecology 第四步调 `getHrmUserInfoWithPage`，只把 `data.dataList[].id` 写入 `oa_api_user_id.txt`。也可请管理员从人员卡片读取。不要把工号、appid 或 `wo…` 写入该文件。
 4. 确认 RSA 公钥 `publicKeySpkiBase64` 是否仍为现网 `bridge-config.json` 那一把；新应用若给了新 `spk` 必须更换。
-5. `identity.adapter=on`。自建应用 `WECOM_IDENTITY_CORPID` / `WECOM_IDENTITY_SECRET`：**宿主机写 txt 不够**，必须 compose 挂载 + entrypoint 在 `exec` 前 export + `compose down && up`。漏挂时 `prepare` 回执是 `OA_IDENTITY_NOT_CONFIGURED`。整份 YAML / 脚本见仓库 `docker/` 与 OA 桥接接入手册 5.3；校验见 [身份适配器说明.md](身份适配器说明.md) 第 9 节。
+5. `identity.adapter=on`。自建应用 `WECOM_IDENTITY_CORPID` / `WECOM_IDENTITY_SECRET`：**宿主机写 txt 不够**，必须 compose 挂载 + entrypoint 在 `exec` 前 export + `compose down && up`。漏挂时 `prepare` 回执是 `OA_IDENTITY_NOT_CONFIGURED`。整份 YAML / 脚本见仓库 `docker/` 与 OA 桥接接入手册 5.3；校验见 第 9 节 第 9 节。
 6. 按 OA 桥接接入手册 **4.2** 装依赖（`mysql2` / `jpeg-js` / `pngjs`），并按 [../MySQL 数据库准备.md](../MySQL%20数据库准备.md) 准备好库。缺包或连不上库时员工见「确认准备失败」。
 7. 跑只读预检 `readonly-preflight.mjs`（库可连、表已建 + 流程 602 可创建，不建单）。
 8. 测试企微号 `prepare`：应命中或写入 `oa_identity`，得到 `confirmationId`。不要把日志里的 `wo…` 当作工号或 `xqsqr`。
@@ -273,11 +266,217 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 预检 `TOKEN_REJECTED`：secret、appid、公钥三者之一不对。  
 `INVALID_CONFIGURATION` / `NOT_CONFIGURED`：缺数字接口账号 id，或格式不是纯数字（这是 **OA 建单**凭据）。  
 `OA_IDENTITY_NOT_CONFIGURED`：转换凭据未进 Gateway 主进程（compose 未挂或 entrypoint 未 export）。与上一码不是同一件事。  
-`docker logs` grep 不到 `OA_IDENTITY_*` 是预期；查会话 jsonl，见身份适配器说明第 9 节。
+`docker logs` grep 不到 `OA_IDENTITY_*` 是预期；查会话 jsonl，见 9.9 节。
 
 ---
 
-## 9. 禁止事项
+---
+
+## 9. 身份转换（企微 → 工号 → OA 人员 id）
+
+### 9.1 定位
+
+| 项 | 现状 |
+| --- | --- |
+| 代码 | OA 桥接插件内 `oa-workflow-bridge/src/identity/`（`resolve.mjs`、`wecom-client.mjs`、`oa-hrm.mjs`、`errors.mjs`）。原独立包 `wecom-oa-identity-adapter` 已并入，不再单独部署 |
+| 进程形态 | Gateway 进程内模块，由 `prepare` 调用。不是单独服务、不是插件、不注册模型 tool |
+| 开关 | `bridge-config.json` 的 `identity.adapter`：`on`（现网）/ `off` |
+| 缓存 | MySQL 表 `oa_identity`（命中 24 小时，失败负缓存 10 分钟） |
+| 对齐策略 | 企微明文 userid 就是 OA 工号；扩展属性「工号」若存在必须相等 |
+| 凭据 | 自建应用 `WECOM_IDENTITY_CORPID` / `WECOM_IDENTITY_SECRET`（不是机器人 BotSecret） |
+
+为什么要转换：现网 `requesterSenderId` 是 `wo` 开头的加密 userid，直接当工号查人事会找不到人。
+
+```text
+通道 wecom-openclaw-plugin
+  → ctx.requesterSenderId = open_userid（加密串）
+oa_workflow.prepare → src/identity/resolve
+  → 查 oa_identity；miss 时 企微 user/get → 明文 userid（= 工号）→ getHrmUserInfoWithPage → 数字人员 id → 写 oa_identity
+  → 人员 id 写进工单 oa_requester_id
+oa_workflow.submit_confirmed
+  → Header userid（RSA）与 xqsqr = 同一人员 id
+  → 另调 getHrmSimpleInfo 取 xqsqbm / gw / bgdd（hrm-profile.mjs，不是身份转换）
+```
+
+通道凭据（BotId / BotSecret）、转换凭据（自建应用 corpid / secret）、OA 凭据（appid / AppSecret）是三套，不能混。
+
+---
+
+### 9.2 稳定契约
+
+| 项 | 规则 |
+| --- | --- |
+| 查找键 | `mapping_code` = SHA-256(`requesterSenderId`) 截前 24 位小写十六进制（与工单 `sender_code` 相同） |
+| 值 | 仅 1–18 位数字 `oa_user_id`；或失败时的短错误码 `miss_code` |
+| 禁止落库 / 日志 | `open_userid`、明文 userid、工号、人事 PII、AppSecret、corpsecret |
+| `xqsqr` / 建单 Header `userid` | 员工人员 id；不是接口账号、不是 `wo…`、不是 appid、不是工号 |
+
+---
+
+### 9.3 企微转换 API
+
+| 步 | 接口 | 输入 | 输出 |
+| --- | --- | --- | --- |
+| 换 token | `GET https://qyapi.weixin.qq.com/cgi-bin/gettoken` | 自建应用 `corpid` + `corpsecret` | `access_token`；进程内缓存 90 分钟（官方 2 小时） |
+| 主路径 | `GET https://qyapi.weixin.qq.com/cgi-bin/user/get` | token + `requesterSenderId` | `userid`；扩展属性「工号」 |
+| 回退 | `POST https://qyapi.weixin.qq.com/cgi-bin/batch/openuserid_to_userid` | `{ "open_userid_list": [senderId] }` | `userid_list[].userid` |
+
+- 成员必须在该自建应用**可见范围**内。`user/get` 返回 81013 / 60011 记 `WECOM_IDENTITY_OUT_OF_SCOPE`，不再回退。
+- `invalid_open_userid_list` 非空记 `WECOM_OPENUSERID_INVALID`。
+- token 失效类 errcode 清进程内 token 缓存并记 `WECOM_IDENTITY_TOKEN_FAILED`。
+- 每次只转当前发送人一条；日志不记 `open_userid` 和明文 userid。
+
+### 9.4 工号对齐
+
+| 情况 | 动作 |
+| --- | --- |
+| 明文 userid 等于 OA `workcode` | 用它点查人事 |
+| 扩展属性「工号」存在且不等于 userid | fail-closed：`WECOM_IDENTITY_ALIGN_MISMATCH` |
+| 没有扩展属性「工号」 | 把明文 userid 当 workcode（现网已验证口径） |
+
+### 9.5 OA 人事点查
+
+| 项 | 要求 |
+| --- | --- |
+| 接口 | `POST https://adtekoa.com/api/hrm/resful/getHrmUserInfoWithPage`，Body `{ "params": { "workcode": "<工号>" } }` |
+| 认证 | 与现网实测一致：只带 `Content-Type`，不带 token / appid / userid；须 OA 管理员把 Gateway 出口 IP 加白。不要把这种写法推广到建单 |
+| 成功 | `code="1"` 且 `totalSize=1`，取 `dataList[0].id` |
+| 拒绝 | 0 条 → `OA_IDENTITY_NOT_FOUND`；多条 → `OA_IDENTITY_AMBIGUOUS`；`status` ∈ 4/5/6/7 或 `accounttype=1` → `OA_IDENTITY_INACTIVE` |
+| PII | 整段 `dataList` 不写日志、不落库、不回给员工 |
+
+---
+
+### 9.6 `resolve` 流水线
+
+| 序 | 动作 | 失败码 |
+| --- | --- | --- |
+| 1 | 校验 `senderId` 非空，算 `mapping_code` | `WECOM_IDENTITY_INVALID_SENDER` |
+| 2 | 查 `oa_identity`：有未过期 `oa_user_id` 直接返回 | — |
+| 3 | 有未过期 `miss_code` 直接抛出该码，不打企微 / 人事 | 上次的码 |
+| 4 | 读 `WECOM_IDENTITY_CORPID` / `WECOM_IDENTITY_SECRET` | `OA_IDENTITY_NOT_CONFIGURED` |
+| 5 | `user/get`，必要时 `openuserid_to_userid` | `WECOM_OPENUSERID_INVALID` / `WECOM_IDENTITY_OUT_OF_SCOPE` / `WECOM_IDENTITY_TOKEN_FAILED` |
+| 6 | 工号对齐 | `WECOM_IDENTITY_ALIGN_MISMATCH` |
+| 7 | `getHrmUserInfoWithPage` | `OA_IDENTITY_NOT_FOUND` / `OA_IDENTITY_AMBIGUOUS` / `OA_IDENTITY_INACTIVE` / `OA_IDENTITY_LOOKUP_FAILED` |
+| 8 | 写 `oa_identity`（`oa_user_id`，24 小时） | — |
+
+失败时写 10 分钟负缓存（`miss_code`），**但** `OA_IDENTITY_NOT_CONFIGURED` / `WECOM_IDENTITY_TOKEN_FAILED` 不写，免得补完凭据还被挡。身份失败不写工单、不调建单。
+
+#### 9.6.1 无重试与回执
+
+企微、人事同一 HTTP 请求**不自动重试**。企微超时 20 秒，人事超时 30 秒。`user/get` → `openuserid_to_userid` 是协议回退，不是重试；负缓存期间再 `prepare` 直接回上次的码。
+
+回给模型的 JSON 只有 `ok` / `code` / `message`（不含 `mapping_code`、SenderId、HTTP 原文、明文 userid、工号），例如：
+
+```json
+{ "ok": false, "code": "OA_IDENTITY_LOOKUP_FAILED", "message": "OA HR request failed" }
+```
+
+员工可见：`OA_IDENTITY_NOT_FOUND` / `OA_IDENTITY_NOT_CONFIGURED` / `OA_IDENTITY_MAPPING_REQUIRED` / `OA_IDENTITY_INACTIVE` / `WECOM_IDENTITY_TOKEN_FAILED` / `WECOM_IDENTITY_OUT_OF_SCOPE` / `WECOM_IDENTITY_ALIGN_MISMATCH` / `WECOM_IDENTITY_INVALID_SENDER` →「还不能提交到 OA / 账号还没开通提交权限」；`OA_IDENTITY_LOOKUP_FAILED` / `OA_IDENTITY_AMBIGUOUS` / `WECOM_OPENUSERID_INVALID` →「确认准备失败」。回执 `hintZh` 已写好，原样输出即可。
+
+---
+
+### 9.7 缓存表 `oa_identity`
+
+| 列 | 说明 |
+| --- | --- |
+| `mapping_code` | 主键，24 位 hex |
+| `oa_user_id` | 命中时的数字人员 id |
+| `miss_code` | 负缓存的短错误码 |
+| `expires_at` | 毫秒时间戳；到期视为不存在，定时回收删除 |
+
+手工点查（只读）：
+
+```sql
+SELECT oa_user_id, miss_code, FROM_UNIXTIME(expires_at / 1000) FROM xa_oa.oa_identity WHERE mapping_code = '<24 位 hex>';
+```
+
+员工换了工号 / 调岗离职要立刻生效时，可删该行，下次 `prepare` 重新现查。
+
+---
+
+### 9.8 配置与凭据
+
+| 位置 | 内容 |
+| --- | --- |
+| `bridge-config.json` | `"identity": { "adapter": "on" }`。`off` 时不查，`prepare` 回 `OA_IDENTITY_MAPPING_REQUIRED` |
+| `~/xa/secrets/wecom_identity_corpid.txt` / `wecom_identity_secret.txt` | compose `secrets` 挂载，entrypoint `export WECOM_IDENTITY_CORPID` / `WECOM_IDENTITY_SECRET`（仓库 `docker/` 已写好） |
+| `openclaw.json` | **不涉及**。身份转换不是插件，不进 `plugins.allow` / `alsoAllow` |
+
+只在宿主机写 txt 不够：必须 compose 声明 + entrypoint export + `down && up`。手工排查脚本：
+
+```bash
+docker exec -it xa-gateway node /opt/xa/oa-workflow-bridge/scripts/manual-resolve.mjs <open_userid>
+```
+
+默认不读写缓存；`--write-cache` 写 `oa_identity`（需 `OA_MYSQL_PASSWORD`）；`--show-userid` 才打印明文 userid（只在本机看，不要外传）。
+
+---
+
+### 9.9 排障：`OA_IDENTITY_NOT_CONFIGURED` 与会话回执
+
+页脚「身份待核验」只表示公开版通道没有 `SenderName`，**不是**本错误。是否映射只认 `oa_workflow` 回执的 `code`。`docker logs` 里**不会**有 `OA_IDENTITY_*`（工具回执不写 stdout），`grep` 为空不能说明没调 `prepare`。
+
+校验转换凭据（只判断有无，不要打印值）：
+
+```bash
+docker exec xa-gateway sh -c 'test -s /run/secrets/wecom_identity_corpid && test -s /run/secrets/wecom_identity_secret && echo WECOM_IDENTITY_FILES_OK || echo WECOM_IDENTITY_FILES_MISSING'
+```
+
+```bash
+docker exec xa-gateway sh -c 'for d in /proc/[0-9]*; do tr "\0" "\n" < "$d/environ" 2>/dev/null | grep -q "^WECOM_IDENTITY_SECRET=" && { echo WECOM_IDENTITY_INJECTED; exit 0; }; done; echo WECOM_IDENTITY_MISSING; exit 1'
+```
+
+| 输出 | 含义 |
+| --- | --- |
+| `WECOM_IDENTITY_FILES_MISSING` | compose 未声明 / 未挂载 |
+| `FILES_OK` + `WECOM_IDENTITY_MISSING` | 已挂文件，entrypoint 未 export 或未 `down && up` |
+| 两项都 OK | 注入完成；若仍失败，看回执 `code` |
+
+查本次 `prepare` 回执（不要 `cat` 整份 jsonl，里面有加密 userid）：
+
+```bash
+ls -lt ~/xa/config/agents/itservicedeskagent/sessions/*.jsonl | head -5
+```
+
+对**最新**那份（不要用 `.trajectory.jsonl` 做唯一依据：规则文件被 `read` 时也会命中同样字符串）：
+
+```bash
+python3 - <<'PY'
+import json,re,pathlib
+sess=pathlib.Path.home()/"xa/config/agents/itservicedeskagent/sessions"
+cands=[p for p in sess.glob("*.jsonl")
+       if ".trajectory." not in p.name and ".reset." not in p.name]
+p=sorted(cands, key=lambda x: x.stat().st_mtime)[-1]
+print("FILE", p.name)
+codes=re.compile(r"(OA_IDENTITY_[A-Z_]+|WECOM_IDENTITY_[A-Z_]+|AWAITING_CONFIRMATION)")
+for i,line in enumerate(p.open(encoding="utf-8",errors="replace"),1):
+    try: o=json.loads(line)
+    except Exception: continue
+    name=o.get("toolName") or o.get("name") or (o.get("message") or {}).get("toolName")
+    if name!="oa_workflow": continue
+    hits=sorted(set(codes.findall(json.dumps(o,ensure_ascii=False))))
+    print(f"L{i} hits={hits}")
+PY
+```
+
+以 `name=oa_workflow` 那一行的 `hits` 为准。`OA_IDENTITY_NOT_FOUND` 等若只出现在 `name=read` 的行，那是规则正文，不是工具回执。
+
+| 回执 `code` | 下一步 |
+| --- | --- |
+| `OA_IDENTITY_NOT_CONFIGURED` | 按上表补 compose / entrypoint / `down && up` |
+| `WECOM_IDENTITY_TOKEN_FAILED` | 自建应用 Secret 不对，不要用 BotSecret |
+| `WECOM_IDENTITY_OUT_OF_SCOPE` | 测号加入**该自建应用**可见范围 |
+| `WECOM_IDENTITY_ALIGN_MISMATCH` | 明文 userid 与扩展属性「工号」不一致 |
+| `OA_IDENTITY_NOT_FOUND` / `OA_IDENTITY_INACTIVE` | 人事按工号查不到或状态无效 |
+| `AWAITING_CONFIRMATION` | 身份已通，pending 已写 |
+
+不要把 jsonl 原文、`wo…`、`response_url` 或 secret 贴进群。
+
+---
+
+---
+
+## 10. 禁止事项
 
 - 不要把 appid、工号、登录名、带日期的账号名、`wo…` 加密 userid 当作人员资源 id 或 `xqsqr`。
 - 不要把 OA AppSecret、API User ID 写入 `openclaw.json`。
@@ -293,15 +492,24 @@ Agent 不再调用 `wecom_mcp`，不再写「工单」子表。成功口径只�
 - 不要把企微转换或人事现查做成模型可调 tool；转换层是插件内部模块 `src/identity/`。
 - 不要只在宿主机写 `wecom_identity_*.txt` 却不挂 compose、不 export（会 `OA_IDENTITY_NOT_CONFIGURED`）。
 - 不要把页脚「身份待核验」当成 OA 申请人未映射。
+- 不要把企微转换或人事点查做成模型可调 tool。
+- 不要用机器人 BotSecret 当自建应用 corpsecret。
+- 不要假设 `requesterSenderId` 等于工号。
+- 不要把明文 userid、工号、`wo…` 或接口账号人员 id 写进 `xqsqr`、建单 Header、库、日志或员工回复。
+- 不要对身份 HTTP 加自动重试；靠负缓存挡住短时间再打。
+- 不要用人事接口扫全员花名册；每次只查当前发送人。
+- 不要在缺转换凭据时改 `adapter=off`；补凭据（回执是 `OA_IDENTITY_NOT_CONFIGURED`）。
+- 不要用 `docker logs | grep OA_IDENTITY` 判断没调 `prepare`。
+- 不要按姓名模糊匹配申请人，不要让员工自报工号当正式绑定。
+- 不要把 `~/xa/secrets/` 提交到 git。
 
 ---
 
-## 10. 相关文档
+## 11. 相关文档
 
 | 文档 | 内容 |
 | --- | --- |
 | [../xA 现网加固与演进全景.md](../xA%20现网加固与演进全景.md) | OA 主路径、切入范围、各层 I/O |
-| [身份适配器说明.md](身份适配器说明.md) | 身份转换：接口、失败码、`oa_identity`、凭据 |
 | [OA Workflow Bridge 接入手册.md](OA%20Workflow%20Bridge%20接入手册.md) | 部署、凭据注入、工具契约、错误码 |
 | [Ecology 流程创建 API 说明.md](Ecology%20流程创建%20API%20说明.md) | applytoken / 建单 / 用工号查人员 |
 | [../外部系统 Tool 插件设计规范.md](../外部系统%20Tool%20插件设计规范.md) | 固定 action、可信上下文、两阶段确认 |

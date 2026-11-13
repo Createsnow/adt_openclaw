@@ -2,9 +2,9 @@
 
 > 本文档由仓库根目录原文档**重组**而来：只调整章节归属与交叉引用，**不改变**部署步骤、命令、YAML、错误码或禁止事项。阅读顺序见 [README.md](README.md)。
 
-适用对象：已在 **WSL2 + Docker** 或 **Linux 服务器 Docker** 环境跑通 OpenClaw Gateway，需要安装并配置 **企业微信（WeCom）插件** 的工程师。
+适用对象：已在 **Linux 服务器 Docker** 环境跑通 OpenClaw Gateway，需要安装并配置 **企业微信（WeCom）插件** 的工程师。
 
-本文档基于两份安装手册（工位 WSL2 / Linux 服务器）与仓库现网样例。现网 Gateway 为 **OpenClaw 2026.9.2**（`docker/docker-compose.yml` 钉 `ghcr.io/openclaw/openclaw:2026.9.2`，`openclaw/openclaw.json` 的 `meta.lastTouchedVersion` 同号）。与原生 Windows + DPAPI 路径无关。
+本文档基于 Linux 服务器安装手册与仓库现网样例。现网 Gateway 为 **OpenClaw 2026.9.2**（`docker/Dockerfile` 以 `ghcr.io/openclaw/openclaw:2026.9.2` 为底构建 `xa-gateway-oa`，`openclaw/openclaw.json` 的 `meta.lastTouchedVersion` 同号）。与原生 Windows + DPAPI 路径无关。
 
 ---
 
@@ -33,7 +33,7 @@ xA Agent（workspace-rules + oa_workflow）
 - 企微**不是** Telegram 那种内置通道，不能在没有插件时单独写 `channels.wecom`。
 - 同一套 BotId/BotSecret 只能被一个 Gateway 持有（单账号模式）。
 - 本仓库**不含** `wecom-openclaw-plugin` 源码，需按第 5 节从 npm catalog 安装，或从已有环境拷贝。
-- 入站发送人是 `body.from.userid` → `SenderId` / `requesterSenderId`。现网智能机器人为 **加密 userid**（`wo` 开头），不是工号。身份如何进 OA 见 `OA_tool/企微到OA身份与数据流.md`（`oa_identity` 缓存）。把加密串转明文 **不在本通道插件内**，见 OA 桥接内 `src/identity/` 与 `OA_tool/身份适配器说明.md`（已验证）。不要在本手册重复映射步骤。
+- 入站发送人是 `body.from.userid` → `SenderId` / `requesterSenderId`。现网智能机器人为 **加密 userid**（`wo` 开头），不是工号。身份如何进 OA 见 `OA_tool/企微到OA身份.md`（`oa_identity` 缓存）。把加密串转明文 **不在本通道插件内**，见 OA 桥接内 `src/identity/` 与 `OA_tool/企微到OA身份.md` 第 9 节（已验证）。不要在本手册重复映射步骤。
 
 ---
 
@@ -50,7 +50,7 @@ xA Agent（workspace-rules + oa_workflow）
 | secrets 文件 | `~/xa/secrets/wecom_bot_id.txt`、`wecom_bot_secret.txt` 各一行 |
 | entrypoint | 已从 secrets 导出 `XA_IT_WECOM_BOT_ID` / `XA_IT_WECOM_BOT_SECRET` |
 
-若 Gateway 尚未跑通：工位先完成 `OpenClaw Gateway WSL2-Docker 安装手册.md` 第 1–7 节；Linux 服务器先完成 `OpenClaw Gateway Linux 服务器安装手册.md` 直到本机 `/healthz` 通（第一次见第 11 节；装企微从第 20 节开始）。
+若 Gateway 尚未跑通：先完成 `OpenClaw Gateway Linux 服务器安装手册.md` 直到本机 `/healthz` 通（第一次见第 11 节；装企微从第 20 节开始）。
 
 ---
 
@@ -63,7 +63,7 @@ xA Agent（workspace-rules + oa_workflow）
 | **阶段 A** | 先让 Gateway 稳定 Up | 无 `channels.wecom`；`plugins.allow` 可不含 wecom |
 | **阶段 B** | Gateway Up 后装插件、配通道 | 安装插件 → 改 allowlist → 加 `channels.wecom` → 重启验证 |
 
-阶段 A：**工位**对应 [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) **5.5 节**（临时去掉 wecom）；**Linux 服务器**没有同名节——第一次 `/healthz` 通见该手册第 11 节，装企微从第 20 节开始。若你当前 Gateway 已是 `Up`，可直接进入阶段 B。
+阶段 A：第一次 `/healthz` 通见该手册第 11 节，装企微从第 20 节开始。若你当前 Gateway 已是 `Up`，可直接进入阶段 B。
 
 ---
 
@@ -202,7 +202,7 @@ oc plugins list
   ],
   "load": {
     "paths": [
-      "/home/node/.openclaw/extensions/oa-workflow-bridge"
+      "/opt/xa/oa-workflow-bridge"
     ]
   },
   "entries": {
@@ -516,7 +516,7 @@ docker logs xa-gateway --tail 50 | grep -i wecom
 docker logs -f xa-gateway
 ```
 
-4. 若网关已回复但内容异常，检查模型是否已按安装手册注入：工位 [WSL2 手册](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) **6.4**；Linux 服务器手册 **第 12–13 节**。占位符未替换时按 `DashScope 兼容 Provider 配置手册.md` 配置。
+4. 若网关已回复但内容异常，检查模型是否已按 Linux 服务器安装手册 **第 12–13 节**注入。占位符未替换时按 `DashScope 兼容 Provider 配置手册.md` 配置。
 
 ---
 
@@ -607,7 +607,7 @@ Gateway Up、插件 npm 安装成功后的典型片段。**现网仓库样例**�
     ],
     "load": {
       "paths": [
-        "/home/node/.openclaw/extensions/oa-workflow-bridge"
+        "/opt/xa/oa-workflow-bridge"
       ]
     },
     "entries": {
@@ -708,15 +708,13 @@ oc channels status --channel wecom
 
 | 文档 | 内容 |
 | --- | --- |
-| `OpenClaw Gateway WSL2-Docker 安装手册.md` | 工位 WSL2 + Docker 全链路部署 |
 | `OpenClaw Gateway Linux 服务器安装手册.md` | Linux 服务器安装（独立完整路径） |
 | `OpenClaw Gateway Docker 运维手册.md` | 日常巡检、日志 grep、睡眠后重连、升级回滚 |
 | `第三方凭据注入与配置中心演进.md` | 第三方参数 Docker 注入 → Nacos 迁移 |
 | `DashScope 兼容 Provider 配置手册.md` | 关掉 qwen3.8-max 隐藏思考（与 7.4 占位配合）；企微通后模型回归 |
 | `外部系统 Tool 插件设计规范.md` | OA 插件形式（`oa_workflow`） |
 | `xA 现网加固与演进全景.md` | OA 主路径、切入范围、各层 I/O |
-| `OA_tool/企微到OA身份与数据流.md` | `from.userid`、`oa_identity` 缓存、通道回传字段 |
-| `OA_tool/身份适配器说明.md` | 转换层（独立适配器已验证；不在本通道插件内） |
+| `OA_tool/企微到OA身份.md` | `from.userid`、通道回传字段、身份转换（在 OA 桥接内，不在本通道插件内） |
 | `第三方凭据注入与配置中心演进.md` | 凭据与安全边界 |
 | [OpenClaw WeCom 官方文档](https://docs.openclaw.ai/channels/wecom) | catalog 安装的是 exact version |
 | [OpenClaw Manage plugins](https://docs.openclaw.ai/plugins/manage-plugins) | `npm:` 前缀、`--force`、`--accept-capabilities` |

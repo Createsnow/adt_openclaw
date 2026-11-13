@@ -106,10 +106,11 @@ xA 现网决策如下。Docker Compose vs `openclaw --profile`、多套目录怎
 ```text
 Linux 虚机（SmartX 划出）
 └── ~/xa/
-    ├── docker-compose.yml
+    ├── docker-compose.yml        → image xa-gateway-oa（官方 OpenClaw + OA 桥接插件与依赖）
     ├── config/openclaw.json      → 容器 /home/node/.openclaw
     ├── workspace/                → Agent 规则（AGENTS.md 等）
-    ├── extensions/               → wecom、oa-workflow-bridge
+    ├── extensions/               → 企微通道插件（OA 插件在镜像 /opt/xa/oa-workflow-bridge）
+    ├── oa-bridge-config.json     → 只读挂到插件目录的 bridge-config.json（不含密码）
     ├── secrets/*.txt             → /run/secrets/（chmod 600）
     └── entrypoint.sh             → export 后 exec gateway --bind lan --port 18789
 ```
@@ -190,10 +191,10 @@ sequenceDiagram
     Ag->>Br: prepare（只抄文字，不读图不猜文档）
     Br->>Rd: 查同号最新单（幂等）
     Br->>Rd: 查此人占名额的单
-    alt 此人跨会话已有待确认
-      Br-->>Ag: ALREADY_PENDING
-      Ag-->>Emp: 拦截卡，只能确认或取消
-    else 无冲突
+    alt 此人有提交中 / 待对账的单
+      Br-->>Ag: RECONCILIATION_REQUIRED
+      Ag-->>Emp: OA 需要人工核对（replyZh）
+    else 可以建单（已有待确认单则由新单替换）
       Br->>Rd: 查 oa_identity
       alt 身份缓存 miss
         Br->>Id: resolve
@@ -268,8 +269,8 @@ flowchart TD
   R -->|是| DRAFT["只抄文字，不读图不猜文档"]
   DRAFT --> L["同号幂等检查"]
   L --> PP{"此人已有待确认?"}
-  PP -->|跨会话| BLOCK["拦截卡 ALREADY_PENDING<br/>不查身份、不写 pending"]
-  PP -->|否| ID["查 oa_identity"]
+  PP -->|提交中 / 待对账| BLOCK["人工核对<br/>不查身份、不建单"]
+  PP -->|否，或待确认（将被替换）| ID["查 oa_identity"]
   ID -->|miss| AD["身份转换：企微 + 人事点查<br/>写 oa_identity"]
   ID -->|hit| ST
   AD --> ST["本机暂存附件，认领 inbox"]
@@ -295,15 +296,15 @@ flowchart TD
 | `attach` | 补图/补文档，不改工单状态；跨会话禁止 | 否 |
 | `submit_confirmed` | 原发送人确认后建单；跨会话可确认，不并入新会话附件 | 是 |
 | `status` | 按人或按确认号点查 | 否 |
-| `cancel` | 取消仍存在的 pending；同会话才回灌附件 | 否 |
+| `cancel` | 取消待确认单，删其附件 | 否 |
 
 员工可见成功口径：只有回执 `SUBMITTED` 且含**数字** `requestId`。`OA_BRIDGE_INACTIVE` 不是成功，不得改走智能表格。OA 明确拒绝记 `failed`，并 **DEL pending**（可换新工单号再 prepare，同一确认号不能再交）；结果不明记 `unknown`（pending 留对账态）。两者都禁止自动重试。
 
 现网 `doCreateRequest` 带 `isnextflow=0`：流程 602 会建出来，但停在申请人节点、不自动推到处理人。这是生产测试开关，不是草稿；项目可用后改回 `1`。
 
-确认规则：原话含「帮我提交 / 立刻提交」等且事实已齐，同一轮 `prepare` + `submit_confirmed`。不要把「好的」「可以」当提交。无该口吻则出确认卡，头行「当前工单」回显问题、地点、附件，工单信息与 `---` 之间写补充引导句（可再写一句或发图片/文档），操作仍是下面的 1 / 2，不写工单类型/系统。
+员工看到的回复由插件拼好（回执 `replyZh`），模型原样转发；AGENTS.md 只保留判断规则和几句追问。确认规则：原话含「帮我提交 / 立刻提交」等且事实已齐，`prepare` 带 `submitNow`，一次建单并提交。不要把「好的」「可以」当提交。无该口吻则出确认卡（回复 1 确认 / 2 取消）。问地点用字母 A–F，数字只留给确认 / 取消。
 
-同一人全局一张待确认。跨 `/new` 只能确认或取消上一张，不能补件或开新单；拦截发生在查身份之前。取消后若本会话已报新问题，同一轮接力当前单。待确认 24 小时未处理按 `expiresAt` 清除。尚未 `prepare` 的 inbox：`/new` 与群聊 `session_end`（空闲 30 分钟）立刻清。
+同一人同时只有一张待确认。再报新问题时插件作废上一张、按新问题建单（同一对话里是改稿，旧单附件带过来；另一个对话里旧单附件随之清除）。另一个对话里也能查到、确认或取消上一张。待确认 24 小时未处理按 `expiresAt` 清除。附件一收到就落库；还没进单的附件 30 分钟不动即过期，`/new` 与群聊 `session_end` 立刻清。
 
 多条规则命中：不猜系统、不 `prepare`。零条命中但确实是 IT 的事：不追问，插件兜底为「运维支持 / 其他」（类型已命中则「该类型 / 其他」）。地点未说明时，电脑/打印机/网络以及国内/越南邮箱、文件管理、MES B/C 必须问清，禁止默认园区。
 

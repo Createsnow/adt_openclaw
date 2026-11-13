@@ -2,7 +2,7 @@
 
 > 本文档由仓库根目录原文档**重组**而来：只调整章节归属与交叉引用，**不改变**部署步骤、命令、YAML、错误码或禁止事项。阅读顺序见 [README.md](README.md)。
 
-适用对象：按 **[OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw Gateway WSL2-Docker 安装手册.md)** 或 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md)** 部署 xA OpenClaw Gateway，需要接入**阿里云百炼（DashScope）**大模型的工程师。工位阶段 B：第 6.4 节；Linux 服务器：第 6.1 节变量契约、第 12–13 节写入模型并第二次 `up`。
+适用对象：按 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md)** 部署 xA OpenClaw Gateway，需要接入**阿里云百炼（DashScope）**大模型的工程师。Linux 服务器：第 6.1 节变量契约、第 12–13 节写入模型并第二次 `up`。
 
 本文档汇总百炼模型在 Docker 全注入路径下的配置思路、字段含义、验证步骤、工具调用回归与常见报错处理。与工位安装手册 **6.4 节**、Linux 服务器安装手册 **第 12–13 节** 配套使用。
 
@@ -50,15 +50,15 @@ OpenClaw 里与「模型」相关的名字有 **三层**，容易混用：
 | `providers.domestic` | OpenClaw 内部的 Provider 标识 | 可改为 `bailian`、`dashscope`，仅为标签 |
 | `models[].id` | 百炼 API 请求体里的 `model` 字段 | `qwen-plus`、`qwen3.8-flash`、`qwen3.8-max` |
 | `models[].name` | Control UI / `models list` 展示用 | 现网仓库样例 `qwen3.8 flash`；与 `id` 不必相同 |
-| `model_ref` | Agent 选用的完整模型引用 | 现网 `bailian/<model_id>`；工位手册示例 `domestic/<model_id>` |
+| `model_ref` | Agent 选用的完整模型引用 | 现网 `bailian/<model_id>` |
 
 ### 1.2 `domestic` 还是 `bailian`？
 
-**都可以**，OpenClaw 不强制 Provider 名。工位 WSL2 手册默认用 **`domestic`**；Linux 服务器手册与现网样例用 **`bailian`**。环境变量前缀两边都是 `XA_DOMESTIC_*`，与 Provider 键名无关。
+**都可以**，OpenClaw 不强制 Provider 名。Linux 服务器手册与现网样例用 **`bailian`**。环境变量前缀都是 `XA_DOMESTIC_*`，与 Provider 键名无关。
 
 | 方案 | `openclaw.json` | `model_ref.txt` |
 | --- | --- | --- |
-| A（**仅工位 WSL2** 手册 §6.4） | `providers.domestic` | `domestic/<model_id>` |
+| A（自定义键名，例如 `domestic`） | `providers.domestic` | `domestic/<model_id>` |
 | B（**Linux 服务器手册 §6.1 / §12 与现网仓库样例**） | `providers.bailian` | `bailian/<model_id>` |
 
 **不要混用**：json 里写 `domestic`，secret 里写 `bailian/qwen3.8-max` → 报错 `Unknown model: bailian/qwen3.8-max`。
@@ -101,7 +101,7 @@ API Key、Base URL、模型必须属于**同一地域**。
 api: openai-completions
 ```
 
-可写在 `openclaw.json` 固定值，也可通过 secret `model_api.txt` → `${XA_DOMESTIC_API}` 注入（**工位 WSL2** 手册 6.4 可选第 5 个 secret；**Linux 服务器**手册第 12 节把 `api` 写死为 `"openai-completions"`）。
+可写在 `openclaw.json` 固定值，也可通过 secret `model_api.txt` → `${XA_DOMESTIC_API}` 注入（**Linux 服务器**手册第 12 节把 `api` 写死为 `"openai-completions"`）。
 
 ### 2.3 常用模型 ID（以控制台为准）
 
@@ -176,7 +176,7 @@ xA Agent 的 `tools.profile` 为 `minimal` + `alsoAllow` 仅含 `oa_workflow`（
 
 每一轮都会再走一遍隐藏思考，群聊「你好」可以从约 12 秒变成约 37 秒。
 
-部署或排障时在 **WSL 家目录**（不要放 `/mnt/c`）执行：
+部署或排障时在 **Gateway 宿主机家目录**（`~/xa` 所在机器）执行：
 
 ```bash
 # 本仓库 workspace-rules 已含占位 MEMORY.md；没有则建一个
@@ -190,7 +190,7 @@ sudo chown 1000:1000 ~/xa/workspace/MEMORY.md
 
 ## 3. Docker 全注入（阶段 B）
 
-变量契约如下。**工位** Provider 名以 WSL2 手册 `domestic` 为例；**Linux 服务器 / 现网样例**用 `bailian`，`model_ref.txt` 前缀必须跟着改。
+变量契约如下。现网样例 Provider 名用 `bailian`；改用别的键名时，`model_ref.txt` 前缀必须跟着改。
 
 | 参数 | 环境变量 | secret 文件 | 示例值 |
 | --- | --- | --- | --- |
@@ -212,7 +212,7 @@ model_ref = <providers 键名> + "/" + <model_id 的值>
 
 创建 `model_*.txt`、升级 `entrypoint.sh`、在 compose 挂载 5 个 model secret，以及 `compose down && up`，完整命令见：
 
-**[OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw Gateway WSL2-Docker 安装手册.md) 第 6.4 节**（工位）或 **[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md) 第 12–13 节**（Linux 服务器）
+**[OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw%20Gateway%20Linux%20服务器安装手册.md) 第 12–13 节**
 
 改 secret 挂载后须重建容器（与安装手册相同，步骤未改）：
 
@@ -267,7 +267,7 @@ docker compose up -d
 }
 ```
 
-上面把 `api` 写死为 `"openai-completions"`，与 Linux 服务器手册第 12 节及现网样例一致。**工位 WSL2 路径**另有一个变体：把 `api` 也写成占位符 `"${XA_DOMESTIC_API}"`，真值来自 `model_api.txt`（见 [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) 第 6.0 / 6.4.4 节）。两种写法都可用，但**同一环境只能选一种**：写死就不必挂 `model_api` secret，用占位符就必须保证 entrypoint 有 export，否则 `${XA_DOMESTIC_API}` 会替换成空串导致 Provider 加载失败。
+上面把 `api` 写死为 `"openai-completions"`，与 Linux 服务器手册第 12 节及现网样例一致。另有一个变体：把 `api` 也写成占位符 `"${XA_DOMESTIC_API}"`，真值来自 `model_api.txt`。两种写法都可用，但**同一环境只能选一种**：写死就不必挂 `model_api` secret，用占位符就必须保证 entrypoint 有 export，否则 `${XA_DOMESTIC_API}` 会替换成空串导致 Provider 加载失败。
 
 **禁止：**
 
@@ -614,7 +614,6 @@ https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 
 | 文档 | 用途 |
 | --- | --- |
-| [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw Gateway WSL2-Docker 安装手册.md) §6.4 | 工位阶段 B 完整 compose / entrypoint |
 | [OpenClaw Gateway Linux 服务器安装手册.md](OpenClaw Gateway Linux 服务器安装手册.md) 第 12–13 节 | 服务器写入模型并第二次 `up` |
 | [OpenClaw Gateway Docker 运维手册.md](OpenClaw Gateway Docker 运维手册.md) | 慢回复日志时间线、crash-loop、升级后回归 |
 | [openclaw.json 配置参考.md](openclaw.json 配置参考.md) §10 | `models` 块字段说明 |

@@ -47,7 +47,7 @@ nc -vz <MySQL 主机> 3306
 
 ## 3. 写进 xA 部署
 
-非机密参数写 `~/xa/extensions/oa-workflow-bridge/bridge-config.json`：
+非机密参数写 `~/xa/oa-bridge-config.json`：
 
 ```json
 "mysql": { "host": "<MySQL 主机>", "port": 3306, "user": "xa_oa", "database": "xa_oa" }

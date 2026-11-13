@@ -43,11 +43,10 @@
   - [13. 第二次 up：检查健康状态并查日志](#sec-13)
 - [阶段五：MySQL 与 OA 插件](#phase-5)
   - [14. 准备独立 MySQL](#sec-14)
-    - [14.1–14.3 密码、compose、启动](#sec-14-1)
-  - [15. 拷贝 OA 自定义插件](#sec-15)
-  - [16. 安装 OA 插件依赖](#sec-16)
+  - [15. 构建 OA 网关镜像](#sec-15)
+  - [16. 写 OA 桥接配置](#sec-16)
   - [17. 把 OA 配进 openclaw 并启用](#sec-17)
-  - [18. 配置 Gateway 共享网络](#sec-18)
+  - [18. 接入 OA 凭据与镜像](#sec-18)
   - [19. 第三次 up：检查健康状态并查日志](#sec-19)
 - [阶段六：企微通道](#phase-6)
   - [20. 安装企微公共插件](#sec-20)
@@ -101,7 +100,7 @@ Gateway Token、企微 Bot、模型 API Key、`baseUrl` 等全部走 Docker Comp
 | 变量名 / `${VAR}` | [第 6 节](#sec-06)一次写齐 secrets | 字段含义见 [openclaw.json 配置参考.md](openclaw.json%20配置参考.md)；以后迁配置中心见 [第三方凭据注入与配置中心演进.md](第三方凭据注入与配置中心演进.md) |
 | 百炼模型字段 | [第 12 节](#sec-12)写入可启动的 catalog | [DashScope 兼容 Provider 配置手册.md](DashScope%20兼容%20Provider%20配置手册.md) |
 | 独立 MySQL 建库 / 授权 / 备份 | [第 14 节](#sec-14)只验连通、写密码文件 | [MySQL 数据库准备.md](MySQL%20数据库准备.md) |
-| OA 工具契约 / `bridge-config` / 错误码 | [第 15–19 节](#sec-15)只把插件装上并连上 MySQL | [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) |
+| OA 工具契约 / `bridge-config` / 错误码 | [第 15–19 节](#sec-15)只把插件打进镜像并连上 MySQL | [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) |
 | 企微 catalog 钉死 /「思考中」 | [第 20–21 节](#sec-20)用命令装上并启用 | [WeCom 通道插件接入手册.md](WeCom%20通道插件接入手册.md) |
 | 装完之后的巡检、备份、升级 | [第 22 节](#sec-22)只给日常启停 | [OpenClaw Gateway Docker 运维手册.md](OpenClaw%20Gateway%20Docker%20运维手册.md) |
 
@@ -174,15 +173,15 @@ flowchart LR
 12. [模型写入 openclaw.json](#sec-12)
 13. [第二次 up → 健康检查 + 日志](#sec-13) ← models status 不再 unresolved
 14. [准备独立 MySQL](#sec-14)（DBA 建库授权；本机验连通、写密码文件）
-15. [拷贝 OA 自定义插件](#sec-15)
-16. [安装 OA 插件 npm 依赖](#sec-16) ← **必须**在 pull 之后；用官方镜像里的 Node
+15. [构建 OA 网关镜像](#sec-15) ← 插件和依赖打进 `xa-gateway-oa`，不再 `npm install`
+16. [写 OA 桥接配置](#sec-16)（`~/xa/oa-bridge-config.json`）
 17. [把 OA 配进 openclaw 并启用](#sec-17) ← 只改 json，禁止 up
-18. [接入 OA 凭据](#sec-18)（compose 挂 secret + entrypoint export）
+18. [接入 OA 凭据与镜像](#sec-18)（compose 换镜像、挂配置和 secret + entrypoint export）
 19. [第三次 up → 健康检查 + 日志](#sec-19) ← 日志有 `loaded (MySQL state)`，无 `MySQL init failed`
 20. [安装企微公共插件](#sec-20)
 21. [用命令配进 openclaw 并启用 → 核对终态 json](#sec-21)
 
-相对「创建 → 授权 → 凭据 → yml → pull → up → 模型 → up → MySQL → 拷 OA → 装 OA → 启用 OA → OA 凭据 → up → 装企微 → 启用企微」，有六处必须插入或必须提前：
+相对「创建 → 授权 → 凭据 → yml → pull → up → 模型 → up → MySQL → 建 OA 镜像 → OA 配置 → 启用 OA → OA 凭据 → up → 装企微 → 启用企微」，有六处必须插入或必须提前：
 
 <a id="must-insert" name="must-insert"></a>
 
@@ -191,7 +190,7 @@ flowchart LR
 1. **服务器 / Docker 必须在创建目录之前。** 没有 dockerd 谈不上 pull / up。
 2. **必须有 `entrypoint.sh`。** OpenClaw 不读 `*_FILE` 这类变量；secret 文件要先 `export` 成 `${VAR}` 对应的环境变量。
 3. **第一次 `up` 之前必须有一份最小 `openclaw.json`。** 至少含 `gateway.auth.token`。不要在这一份里写 `plugins` / `channels.wecom` / 模型 catalog。
-4. **`docker pull` 必须在「安装 OA 依赖」之前。** `npm install` 用的是 `docker run ... openclaw/openclaw:latest npm install`，镜像不在本机就会去 Docker Hub 再拉一次，或直接失败。
+4. **第三次 `up` 之前必须先构建 `xa-gateway-oa` 镜像，并把 compose 的 `image` 换成它。** OA 插件和它的 `node_modules` 只在这张镜像里；还用官方镜像起，`plugins.load.paths` 找不到插件。
 5. **启用 OA 插件之后、第三次 `up` 之前，必须先让独立 MySQL 可连，并把 `OA_MYSQL_PASSWORD` 等 OA 凭据接进 compose / entrypoint。** 插件一加载就会连库建表，没接好会 `MySQL init failed`。
 6. **写 `channels.wecom` 之前必须先把公共插件装上并 enabled。** 通道 id 由插件注册；插件未装时写 `channels.wecom` 会 `unknown channel id`，容器 Restarting。
 
@@ -331,7 +330,7 @@ docker version
 docker compose version
 ```
 
-不要：`sudo apt install npm`、不要在宿主装 Node。插件依赖一律用官方 OpenClaw 镜像里的 Node 安装。
+不要：`sudo apt install npm`、不要在宿主装 Node。OA 插件依赖在第 15 节构建镜像时装进去。
 
 > **成功标准：** `groups` 含 `docker`；`docker version` 与 `docker compose version` 都有输出。
 
@@ -447,7 +446,7 @@ ls -la ~/xa/config ~/xa/workspace ~/xa/extensions ~/xa/secrets
 
 - 拷 `oa-workflow-bridge` / `wecom-openclaw-plugin`
 - 写 `openclaw.json` / secrets / compose
-- `npm install`
+- 构建镜像
 - 对整棵 `~/xa` 做总 `chown`（下一章才授权）
 
 > **成功标准：** 四个子目录存在；`~/xa/secrets` 权限 `700`；`~/xa/workspace/MEMORY.md` 存在；`extensions/` 此时可以是空的。
@@ -548,7 +547,7 @@ OpenClaw 通过 `${VAR_NAME}` 引用环境变量（仅大写 `[A-Z_][A-Z0-9_]*`�
 
 `model_ref.txt` = `bailian/` + `model_id.txt` 的值。Provider 键名是 `bailian`，不要写成 `domestic/`。
 
-> **与工位 WSL2 手册的差异（不要互抄）：** 上表的**变量名与 secret 文件名**两本手册相同，改契约要两边同步。但 [OpenClaw Gateway WSL2-Docker 安装手册.md](OpenClaw%20Gateway%20WSL2-Docker%20安装手册.md) 第 6.0 / 6.4 节用的是 Provider 键 `domestic`，并且那边 API 协议走 `${XA_DOMESTIC_API}` 占位符。本手册与现网一致用 `bailian` + json 写死协议，**不要**把工位手册 6.4 的 models 片段抄进来。注意环境变量前缀仍叫 `XA_DOMESTIC_*`，这只是历史命名，与 Provider 键名无关。
+> **注意：** 本手册与现网一致用 Provider 键 `bailian` + json 写死协议。环境变量前缀仍叫 `XA_DOMESTIC_*`，这只是历史命名，与 Provider 键名无关。
 
 各文件一行，不要多余空格换行。`id -u` 不是 `1000` 时，把 `>` 改成 `sudo tee ... >/dev/null`。
 
@@ -777,9 +776,7 @@ sudo chown 1000:1000 ~/xa/config/openclaw.json
 
 ## 10. 拉取 OpenClaw 镜像
 
-> **目标：** 本机有一张可用来 `compose up` 和后面 `npm install` 的官方镜像。
-
-本模块必须在第一次 `up` 之前、也必须在「用官方镜像跑 `npm install`」之前做完。不要把 `npm install` 写进 compose 或 entrypoint。
+> **目标：** 本机有一张可用来第一次 `compose up` 的官方镜像。第 15 节构建 OA 镜像时也可以以它为底。
 
 **自检：**
 
@@ -828,7 +825,7 @@ docker images | grep openclaw
 
 把 `proxy.internal:8080` 换成实际代理。拉通后可删 `http-proxy.conf` 并恢复 `daemon.json.bak`。不要用非官方第三方 OpenClaw 镜像。
 
-> **成功标准：** `docker images | grep openclaw` 能看到将用于 compose / `npm install` 的那一个名字（Hub 名或 GHCR 名，不要两个名字混用却只拉了其中一个）。
+> **成功标准：** `docker images | grep openclaw` 能看到将用于 compose / 第 15 节构建的那一个名字（Hub 名或 GHCR 名，不要两个名字混用却只拉了其中一个）。
 
 [← 9. 最小 openclaw.json（仅网关）](#sec-09) · [↑ 目录](#toc) · [下一节 → 11. 第一次 up：检查健康状态并查日志](#sec-11)
 
@@ -1141,7 +1138,7 @@ docker exec -it \
 
 ## 14. 准备独立 MySQL
 
-> **目标：** 独立机器上的 MySQL 已有库 `xa_oa` 和账号，Gateway 虚机能连到 3306；密码写成 secret 文件。本模块**还不改** Gateway 的 compose / entrypoint，也**还不拷** OA 插件。
+> **目标：** 独立机器上的 MySQL 已有库 `xa_oa` 和账号，Gateway 虚机能连到 3306；密码写成 secret 文件。本模块**还不改** Gateway 的 compose / entrypoint，也**还不建** OA 镜像。
 
 OA 桥接一加载就会连库并建表，与 `bridge-config.json` 的 `active` 无关。所以库必须在第 19 节第三次 `up`（加载 OA）之前就绪。
 
@@ -1161,71 +1158,53 @@ chmod 600 ~/xa/secrets/oa_mysql_password.txt
 
 > **成功标准：** `nc` 显示 `succeeded` / `open`；`~/xa/secrets/oa_mysql_password.txt` 存在且权限 `600`。Gateway 此时**还不必** `down`。
 
-[← 13. 第二次 up：检查健康状态并查日志](#sec-13) · [↑ 目录](#toc) · [下一节 → 15. 拷贝 OA 自定义插件](#sec-15)
+[← 13. 第二次 up：检查健康状态并查日志](#sec-13) · [↑ 目录](#toc) · [下一节 → 15. 构建 OA 网关镜像](#sec-15)
 
 ---
 
 <a id="sec-15" name="sec-15"></a>
 
-## 15. 拷贝 OA 自定义插件
+## 15. 构建 OA 网关镜像
 
-> **目标：** 把桥接插件放到 `~/xa/extensions/`，并填好它的 `bridge-config.json`。**只拷文件，不 npm install。**
+> **目标：** 本机有 `xa-gateway-oa:2026.9.2`：官方 OpenClaw + OA 桥接插件（`/opt/xa/oa-workflow-bridge`）+ 依赖 `mysql2` / `jpeg-js` / `pngjs`。
 
-身份转换已并入桥接（`src/identity/`），只有这一个目录。开关在 `bridge-config.json` 的 `identity.adapter`。不要再拷旧的 `oa-workflow-bridge-redis` / `wecom-oa-identity-adapter`。不要在本模块拷企微公共插件。
+身份转换已并入桥接（`src/identity/`），镜像里只有这一个插件。宿主不装 Node、不 `npm install`、不往 `~/xa/extensions/` 拷 OA 插件；`extensions/` 只留给第 20 节的企微公共插件。
 
 ```bash
-REPO="$HOME/handoff/xa"
-
-mkdir -p ~/xa/extensions
-cp -r "$REPO/OA_tool/oa-workflow-bridge" ~/xa/extensions/
-rm -rf ~/xa/extensions/oa-workflow-bridge/node_modules
-
-sudo chown -R 1000:1000 ~/xa/extensions
-ls ~/xa/extensions/oa-workflow-bridge
+cd ~/handoff/xa
+docker build -f docker/Dockerfile -t xa-gateway-oa:2026.9.2 .
 ```
 
-编辑 `~/xa/extensions/oa-workflow-bridge/bridge-config.json`：`mysql.host` / `user` / `database` 填 DBA 给的值（**不写密码**）；`appId` / `publicKeySpkiBase64` 填 OA 侧给的值；`active` 初装保持 `false`。字段说明见 [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) 5.2。
+- 底座默认 `ghcr.io/openclaw/openclaw:2026.9.2`。拉不到 GHCR、想用第 10 节已拉好的镜像时，加 `--build-arg OPENCLAW_IMAGE=openclaw/openclaw:latest`（换成 `docker images` 里实际的名字）。
+- npm 超时：加 `--build-arg npm_config_registry=https://registry.npmmirror.com`。
+- 生产机完全不能出网：在别的 Linux x64 机器上构建，`docker save xa-gateway-oa:2026.9.2 | gzip > xa-gateway-oa.tar.gz`，拷过来 `docker load < xa-gateway-oa.tar.gz`。
 
-> **成功标准：** 目录在 `~/xa/extensions/oa-workflow-bridge`；属主 `1000:1000`；`bridge-config.json` 的 `mysql.host` 不是占位符；`active` 仍为 `false`。
+```bash
+docker run --rm --entrypoint ls xa-gateway-oa:2026.9.2 /opt/xa/oa-workflow-bridge/node_modules
+```
 
-[← 14. 准备独立 MySQL](#sec-14) · [↑ 目录](#toc) · [下一节 → 16. 安装 OA 插件依赖](#sec-16)
+> **成功标准：** 输出里有 `mysql2`、`jpeg-js`、`pngjs`。本模块不 `up`。以后改了插件代码或 `systems.json` 都要重新构建（接入手册 4.2）。
+
+[← 14. 准备独立 MySQL](#sec-14) · [↑ 目录](#toc) · [下一节 → 16. 写 OA 桥接配置](#sec-16)
 
 ---
 
 <a id="sec-16" name="sec-16"></a>
 
-## 16. 安装 OA 插件依赖
+## 16. 写 OA 桥接配置
 
-> **目标：** 桥接出现 `node_modules/mysql2`、`jpeg-js`、`pngjs`。
-
-这是一次性容器（`--rm`）：只借官方镜像里的 Node 22+ 把 `node_modules` 写进挂载目录，**不是**再起一套 Gateway。宿主不要 `apt install npm`。不要等 Gateway 加载插件之后再 `docker exec` 补装。缺包现象与约定见接入手册 **4.2**。
-
-Docker 按「仓库名:标签」匹配，不按内容。先看本机实际名字：
+> **目标：** `~/xa/oa-bridge-config.json` 就绪。它不进镜像，第 18 节由 compose 只读挂进容器，改它不必重建镜像。
 
 ```bash
-docker images | grep openclaw
+cp ~/handoff/xa/OA_tool/oa-workflow-bridge/bridge-config.example.json ~/xa/oa-bridge-config.json
+sudo chown 1000:1000 ~/xa/oa-bridge-config.json
 ```
 
-本机有 `openclaw/openclaw:latest` 用下面这条；只有 `ghcr.io/openclaw/openclaw:latest` 时把最后一行镜像换成它（不要 `docker pull openclaw/openclaw:latest`）：
+编辑它：`mysql.host` / `user` / `database` 填 DBA 给的值（**不写密码**）；`appId` / `publicKeySpkiBase64` 填 OA 侧给的值；`active` 初装保持 `false`；`isnextflow` 开发阶段保持 `"0"`。字段说明见 [OA_tool/OA Workflow Bridge 接入手册.md](OA_tool/OA%20Workflow%20Bridge%20接入手册.md) 5.2。
 
-```bash
-docker run --rm --user 1000:1000 -e HOME=/tmp -e NPM_CONFIG_CACHE=/tmp/npm-cache \
-  -v "$HOME/xa/extensions/oa-workflow-bridge:/app" -w /app \
-  openclaw/openclaw:latest \
-  npm install --omit=dev
-```
+> **成功标准：** 文件存在、属主 `1000:1000`；`mysql.host` 不是占位符；`active` 仍为 `false`。本模块不 `up`。
 
-国内 npm 超时，在 `npm install --omit=dev` 后面追加 `--registry=https://registry.npmmirror.com`。
-
-```bash
-ls ~/xa/extensions/oa-workflow-bridge/node_modules/{mysql2,jpeg-js,pngjs}
-```
-
-也可以在已装好的 Linux x64 机器上把整个目录（含 `node_modules`）拷过来，生产机不必连 npm。再装时机：目录被清空、从备份恢复（备份通常排除 `node_modules`）、`package.json` 依赖变更。
-
-> **成功标准：** 三个包目录都存在。本模块不 `up`。
-
-[← 15. 拷贝 OA 自定义插件](#sec-15) · [↑ 目录](#toc) · [下一节 → 17. 把 OA 配进 openclaw 并启用](#sec-17)
+[← 15. 构建 OA 网关镜像](#sec-15) · [↑ 目录](#toc) · [下一节 → 17. 把 OA 配进 openclaw 并启用](#sec-17)
 
 ---
 
@@ -1235,12 +1214,12 @@ ls ~/xa/extensions/oa-workflow-bridge/node_modules/{mysql2,jpeg-js,pngjs}
 
 > **目标：** 在「含模型」配置上加入 OA 桥接插件。
 
-改 `plugins.load.paths` 后必须 `docker compose down && docker compose up -d` 才生效。**本模块只改 json，禁止在这里 `up`。** 现在 up 会加载插件去连库，而 Gateway 还没拿到 `OA_MYSQL_PASSWORD`。
+改 `plugins.load.paths` 后必须 `docker compose down && docker compose up -d` 才生效。**本模块只改 json，禁止在这里 `up`。** 现在还在跑官方镜像，里面没有 `/opt/xa/oa-workflow-bridge`；Gateway 也还没拿到 `OA_MYSQL_PASSWORD`。
 
 在第 12 节「含模型」的 json 上**追加** OA 桥接（不要整文件换成终态样例，以免把后面还没有的企微段提前写上）：
 
 - `plugins.allow` 只含 `oa-workflow-bridge`
-- `plugins.load.paths` 只有 `/home/node/.openclaw/extensions/oa-workflow-bridge`
+- `plugins.load.paths` 只有 `/opt/xa/oa-workflow-bridge`（镜像里的路径）
 - `plugins.entries.oa-workflow-bridge.enabled: true`（hooks 含 `allowConversationAccess`）
 - 全局与 Agent 两处 `tools.alsoAllow` 仅 `oa_workflow`
 - **不要**写 `wecom-openclaw-plugin`、`channels.wecom`
@@ -1249,15 +1228,15 @@ ls ~/xa/extensions/oa-workflow-bridge/node_modules/{mysql2,jpeg-js,pngjs}
 
 > **成功标准：** json 含 `oa-workflow-bridge` 且 `enabled: true`；`load.paths` 只有这一条；没有企微通道。本模块不 `up`。
 
-[← 16. 安装 OA 插件依赖](#sec-16) · [↑ 目录](#toc) · [下一节 → 18. 接入 OA 凭据](#sec-18)
+[← 16. 写 OA 桥接配置](#sec-16) · [↑ 目录](#toc) · [下一节 → 18. 接入 OA 凭据与镜像](#sec-18)
 
 ---
 
 <a id="sec-18" name="sec-18"></a>
 
-## 18. 接入 OA 凭据
+## 18. 接入 OA 凭据与镜像
 
-> **目标：** compose 挂上 OA 相关 secret，entrypoint 把它们 `export` 成插件读的环境变量。凭据注入方式与第 6–8 节相同。
+> **目标：** compose 换成 `xa-gateway-oa` 镜像、挂上 OA 配置和 secret；entrypoint 把 secret `export` 成插件读的环境变量。凭据注入方式与第 6–8 节相同。
 
 先写齐 secret 文件（权限 `600`）：
 
@@ -1269,7 +1248,11 @@ ls ~/xa/extensions/oa-workflow-bridge/node_modules/{mysql2,jpeg-js,pngjs}
 | `wecom_identity_corpid.txt` | `WECOM_IDENTITY_CORPID` | 企业 corpid |
 | `wecom_identity_secret.txt` | `WECOM_IDENTITY_SECRET` | 自建应用 secret（不是机器人 BotSecret） |
 
-`~/xa/docker-compose.yml`：在 `services.xa-gateway.secrets` 与底部 `secrets:` 各加这 5 项（写法对照仓库 [`docker/docker-compose.yml`](docker/docker-compose.yml)）。
+`~/xa/docker-compose.yml`（写法对照仓库 [`docker/docker-compose.yml`](docker/docker-compose.yml)）：
+
+- `image:` 改成 `xa-gateway-oa:2026.9.2`
+- `volumes:` 加一行 `- ./oa-bridge-config.json:/opt/xa/oa-workflow-bridge/bridge-config.json:ro`
+- `services.xa-gateway.secrets` 与底部 `secrets:` 各加上表 5 项
 
 `~/xa/entrypoint.sh`：在 `exec` 之前加（对照仓库 [`docker/entrypoint.sh`](docker/entrypoint.sh)，开头的 `missing or empty secret` 检查清单也补上这 5 个名字）：
 
@@ -1284,11 +1267,13 @@ export WECOM_IDENTITY_SECRET="$(tr -d '\n' < /run/secrets/wecom_identity_secret)
 不要把密码写进 compose 的 `environment:` 或 `bridge-config.json`（`docker inspect` / 文件能看到明文）。不需要额外的 Docker 网络。
 
 ```bash
+grep -q 'image: xa-gateway-oa' ~/xa/docker-compose.yml
+grep -q oa-bridge-config.json ~/xa/docker-compose.yml
 grep -q oa_mysql_password ~/xa/docker-compose.yml
 grep -q OA_MYSQL_PASSWORD ~/xa/entrypoint.sh
 ```
 
-> **成功标准：** 5 个 secret 文件存在；compose 与 entrypoint 都能 `grep` 到。本模块不 `up`（下一章 `down && up`，只 `restart` 不够）。
+> **成功标准：** 5 个 secret 文件存在；四条 `grep` 都通过。本模块不 `up`（下一章 `down && up`，只 `restart` 不够）。
 
 [← 17. 把 OA 配进 openclaw 并启用](#sec-17) · [↑ 目录](#toc) · [下一节 → 19. 第三次 up：检查健康状态并查日志](#sec-19)
 
@@ -1339,7 +1324,7 @@ docker exec -it \
 
 > **成功标准：** `docker compose ps` 为 `Up`；本机 `/healthz` 通；日志无 `MySQL init failed`；`plugins list` 含 OA 且 enabled；三张表已建。
 
-[← 18. 接入 OA 凭据](#sec-18) · [↑ 目录](#toc) · [下一节 → 20. 安装企微公共插件](#sec-20)
+[← 18. 接入 OA 凭据与镜像](#sec-18) · [↑ 目录](#toc) · [下一节 → 20. 安装企微公共插件](#sec-20)
 
 ---
 
@@ -1594,10 +1579,10 @@ OA 状态库在独立 MySQL 上，停 Gateway 不影响它。`restart: unless-st
 | [12](#sec-12) | 写入模型 | json 含 `bailian` catalog；仍无 `plugins` / `channels` |
 | [13](#sec-13) | 第二次 up | `models status` 不再 unresolved |
 | [14](#sec-14) | 独立 MySQL | `nc` 通 3306；`oa_mysql_password.txt` 已写 |
-| [15](#sec-15) | 拷贝 OA 插件 | 桥接 + 身份适配器目录存在；`active=false` |
-| [16](#sec-16) | 安装 OA 依赖 | `mysql2` / `jpeg-js` / `pngjs` 都存在 |
+| [15](#sec-15) | 构建 OA 镜像 | `xa-gateway-oa:2026.9.2` 里有 `mysql2` / `jpeg-js` / `pngjs` |
+| [16](#sec-16) | OA 桥接配置 | `~/xa/oa-bridge-config.json` 已填 MySQL 主机；`active=false` |
 | [17](#sec-17) | 启用 OA 插件 | json 仅 OA 进 `plugins`；本步不 `up` |
-| [18](#sec-18) | OA 凭据 | 5 个 secret 已挂；entrypoint 含 `OA_MYSQL_PASSWORD` |
+| [18](#sec-18) | OA 凭据与镜像 | `image` 为 `xa-gateway-oa`；配置已挂；5 个 secret 已挂；entrypoint 含 `OA_MYSQL_PASSWORD` |
 | [19](#sec-19) | 第三次 up | `/healthz` 通；日志无 `MySQL init failed`；三张表已建 |
 | [20](#sec-20) | 安装企微公共插件 | `plugins list` 含 wecom 且 enabled |
 | [21](#sec-21) | 命令启用企微 + 终态 json | 测试机器人能收发；bindings 指向 `itservicedeskagent` |
@@ -1616,12 +1601,11 @@ OA 状态库在独立 MySQL 上，停 Gateway 不影响它。`restart: unless-st
 | --- | --- |
 | `registry-1.docker.io` i/o timeout | 检查 `/etc/docker/daemon.json` 的 `registry-mirrors`；yml 仍用 `openclaw/openclaw:latest` |
 | 加速源「免费节点繁忙」 | GHCR：`docker pull ghcr.io/openclaw/openclaw:latest && docker tag ghcr.io/openclaw/openclaw:latest openclaw/openclaw:latest`。或给 dockerd 配公司 HTTP 代理后再 `docker pull openclaw/openclaw:latest` |
-| `npm install` 又在拉 Hub 镜像 | 本机只有 `ghcr.io/openclaw/openclaw:latest`。不要补拉 Hub 名。把 `docker run` 的镜像改成 GHCR 名，或先 `docker tag` |
+| `docker build` 拉不到 `ghcr.io/openclaw/openclaw:2026.9.2` | 用本机已有的官方镜像做底：`--build-arg OPENCLAW_IMAGE=openclaw/openclaw:latest`（第 15 节） |
 | `gateway.bind` 校验失败、容器重启 | `--bind` / json 里只能用 `lan`、`loopback`、`auto`、`tailnet`，不要写 IP |
 | Permission denied 读写挂载目录 | `sudo chown -R 1000:1000 ~/xa`；不要 `chmod 777` |
 | 读 `/run/secrets` Permission denied | secret 改成 `600` 且 `chown 1000:1000` |
 | `chown` 之后无法编辑 json / secrets | SSH 用户不是 uid 1000。用 `sudo -e` / `sudo tee`，改完再 `chown 1000:1000` |
-| npm `EACCES` | 先 `sudo chown -R 1000:1000 ~/xa/extensions`，再 `docker run --user 1000:1000 ... npm install` |
 | json 里仍是 `C:\OpenClaw\...` 或 `/home/YOUR_LINUX_USER/...` | 按当前阶段整份替换 `~/xa/config/openclaw.json`（最小网关 / 含模型 / 含 OA / 终态） |
 | 工作区在 NFS/CIFS | 迁到本机盘 `~/xa` |
 | 本机 `curl 127.0.0.1:18789` 通，办公室浏览器打不开 | 用 `ssh -N -L 18789:127.0.0.1:18789 YOUR_LINUX_USER@SERVER`，或防火墙只放行运维网段 |
@@ -1630,9 +1614,9 @@ OA 状态库在独立 MySQL 上，停 Gateway 不影响它。`restart: unless-st
 | `meta: Invalid input`、Restarting | 删掉非法 `meta` 键（`handoffTemplate` 等），换成当前阶段完整 json，`docker compose down && docker compose up -d` |
 | 第一次 up 后 `models status` unresolved | 预期。第 12–13 节写入模型后再查 |
 | `plugin path not found: .../wecom-openclaw-plugin` 且 `unknown channel id: wecom` | 插件未装就写了通道。先去掉 `channels.wecom` 和 wecom 的 `load.paths`，`down && up`，等 `plugins list` 有 wecom 后再写通道 |
-| `plugin path not found: .../oa-workflow-bridge-redis` | json 仍写旧目录。`allow` / `paths` / `entries` 只用 `oa-workflow-bridge` |
+| `plugin path not found: .../oa-workflow-bridge-redis` | json 仍写旧目录。`allow` / `entries` 只用 `oa-workflow-bridge`，`paths` 只用 `/opt/xa/oa-workflow-bridge` |
 | `MySQL init failed: …` | 按 OA 桥接接入手册第 10 节对照：`ECONNREFUSED` / `ETIMEDOUT` 查网络与 `bind-address`；`ER_ACCESS_DENIED_ERROR` 查密码与账号 host；`ER_BAD_DB_ERROR` 查库名；`OA_MYSQL_PASSWORD is not configured` 查第 18 节 |
-| `Cannot find package 'mysql2'` / `Cannot find module 'jpeg-js'` | 按第 16 节对 `oa-workflow-bridge` 跑一次 `docker run --user 1000:1000 ... npm install --omit=dev`，再 `down && up` |
+| `plugin path not found: /opt/xa/oa-workflow-bridge` 或 `Cannot find package 'mysql2'` | compose 仍是官方镜像，或镜像不是用仓库 Dockerfile 建的。按第 15 节重建，确认 `image: xa-gateway-oa:2026.9.2`，再 `down && up` |
 | Gateway Up 但企微 `autostart suppressed` | crash-loop breaker。不要 `channels start --channel`。需要时：`docker exec -it xa-gateway node dist/index.js gateway call channels.start --params '{"channel":"wecom","accountId":"default"}'` |
 | 容器 `Restarting` 时 `docker exec` 进不去 | `cd ~/xa && docker compose down`，按当前阶段完整 json 替换后再 `up`。不要把 `doctor --fix` 当第一次生产试验（可能改 `agents.entries`） |
 | 想用 `onboard` 代替改 json | 不要。会覆盖 xA 的 agent / workspace |
@@ -1640,7 +1624,6 @@ OA 状态库在独立 MySQL 上，停 Gateway 不影响它。`restart: unless-st
 | 企微发出去很久才回 | json 须有 `compat.thinkingFormat: "qwen"` 且 Agent `thinkingDefault: "off"`。占位动画是另一件事：`sendThinkingMessage` |
 | 「思考中」一直转圈 | 插件若是 2026.5.7，把 `sendThinkingMessage` 改为 `false` 并 `restart`。要占位须 `plugins install npm:@wecom/wecom-openclaw-plugin@版本 --force` 升到 ≥ 2026.7.2 |
 | `channels add wecom` 没有 wecom / blocked by allowlist | 先把 `wecom-openclaw-plugin` 写入 `plugins.allow` 与 `entries`（仍不要写 `channels.wecom`），`down && up` 后再安装 |
-| `Command 'npm' not found` | 不要 `sudo apt install npm`。用 `docker run --rm --user 1000:1000 ... openclaw/openclaw:latest npm install --omit=dev` |
 | 重启服务器后容器没了 | `systemctl is-active docker`；`cd ~/xa && docker compose up -d`；确认 compose 有 `restart: unless-stopped` |
 | 改了 baseUrl / Token 不生效 | 只改 `~/xa/secrets/*.txt` 后必须 `docker compose down && docker compose up -d` |
 
@@ -1654,12 +1637,13 @@ docker run --rm --user 1000:1000 \
   -v "$HOME/xa/config:/home/node/.openclaw" \
   -v "$HOME/xa/workspace:/home/node/.openclaw/workspace" \
   -v "$HOME/xa/extensions:/home/node/.openclaw/extensions" \
+  -v "$HOME/xa/oa-bridge-config.json:/opt/xa/oa-workflow-bridge/bridge-config.json:ro" \
   -w /app \
-  openclaw/openclaw:latest \
+  xa-gateway-oa:2026.9.2 \
   node dist/index.js doctor --fix
 ```
 
-本机只有 GHCR 名时把最后一行镜像改成 `ghcr.io/openclaw/openclaw:latest`。改完必须再 `config validate`，并用测试消息回归。
+第 19 节之前还没有 OA 镜像时，用第 10 节拉的官方镜像并去掉 `oa-bridge-config.json` 那一行；之后必须用 `xa-gateway-oa`，否则 doctor 找不到 `/opt/xa/oa-workflow-bridge`，可能把 OA 插件从配置里清掉。改完必须再 `config validate`，并用测试消息回归。
 
 [← 23. 检查清单](#sec-23) · [↑ 目录](#toc) · [下一节 → 25. 安全注意](#sec-25)
 

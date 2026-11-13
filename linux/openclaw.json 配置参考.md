@@ -313,7 +313,7 @@ OA 桥接「最后也当工具用」：对模型暴露的入口就是 `oa_workfl
   → 回复仍由通道 wecom 发出去            ← 还是插件，不是 wecom_mcp
 ```
 
-xA 现网：两处 `alsoAllow`（全局 + `itservicedeskagent`）均只含 `oa_workflow`，**不含** `read` / `wecom_mcp` / `write` / `edit` / `memory_search` / `memory_get` / `message`，也不要把插件 id `wecom-openclaw-plugin` 写进 `alsoAllow`。两处必须一致。Agent 级 `deny` 含 `group:fs`（关掉 `read`/`write`/`edit`）。`tools.media.*.enabled` 为 `false`。`agents.defaults.skipBootstrap` 为 `true`。`agents.defaults.skills` 为 `[]`（Skill 一个都不进 prompt）。身份适配器开关在桥接 `bridge-config.json` 的 `identity.adapter`，见 `OA_tool/身份适配器说明.md` 第 10 节。日志若再出现 `smartsheet_get_records`，见 `WeCom 通道插件接入手册.md` 9.2。
+xA 现网：两处 `alsoAllow`（全局 + `itservicedeskagent`）均只含 `oa_workflow`，**不含** `read` / `wecom_mcp` / `write` / `edit` / `memory_search` / `memory_get` / `message`，也不要把插件 id `wecom-openclaw-plugin` 写进 `alsoAllow`。两处必须一致。Agent 级 `deny` 含 `group:fs`（关掉 `read`/`write`/`edit`）。`tools.media.*.enabled` 为 `false`。`agents.defaults.skipBootstrap` 为 `true`。`agents.defaults.skills` 为 `[]`（Skill 一个都不进 prompt）。身份适配器开关在桥接 `bridge-config.json` 的 `identity.adapter`，见 `OA_tool/企微到OA身份.md` 9.8 节。日志若再出现 `smartsheet_get_records`，见 `WeCom 通道插件接入手册.md` 9.2。
 
 ---
 
@@ -535,7 +535,7 @@ Gateway HTTP/WebSocket 服务与鉴权。同一端口复用：WebSocket 控制/R
   "allow": ["oa-workflow-bridge", "wecom-openclaw-plugin"],
   "deny": ["codex"],
   "load": {
-    "paths": ["/home/node/.openclaw/extensions/oa-workflow-bridge"]
+    "paths": ["/opt/xa/oa-workflow-bridge"]
   },
   "entries": {
     "oa-workflow-bridge": { "enabled": true, "hooks": { "allowConversationAccess": true } },
@@ -775,14 +775,13 @@ OpenClaw **2026.9.2** 现网核对：
 
 | 文档 | 内容 |
 | --- | --- |
-| `OpenClaw Gateway WSL2-Docker 安装手册.md` | 工位 Docker 部署与 openclaw.json 修改步骤 |
 | `OpenClaw Gateway Linux 服务器安装手册.md` | Linux 服务器安装（json 演进见第 9 / 12 节；OA / 企微字段对照 `openclaw/openclaw.json`） |
 | `OpenClaw Gateway Docker 运维手册.md` | 配置变更如何重启、巡检与升级回滚 |
 | `第三方凭据注入与配置中心演进.md` | Docker 注入 → Nacos 配置中心迁移思路 |
 | `WeCom 通道插件接入手册.md` | plugins.allow、channels.wecom、**7.4 sendThinkingMessage** |
 | `DashScope 兼容 Provider 配置手册.md` | `models.providers`、`compat.thinkingFormat`、`MEMORY.md` |
 | `外部系统 Tool 插件设计规范.md` | OA 插件形式与 `oa_workflow` |
-| `OA_tool/身份适配器说明.md` 第 10 节 | 适配器与 `openclaw.json` 的分工：默认不写 allow；开关在 `bridge-config.json` |
+| `OA_tool/企微到OA身份.md` 9.8 节 | 身份转换开关在 `bridge-config.json`，`openclaw.json` 不涉及 |
 | `OpenClaw Gateway 部署拓扑与选型.md` | Docker vs CLI profile |
 
 ---

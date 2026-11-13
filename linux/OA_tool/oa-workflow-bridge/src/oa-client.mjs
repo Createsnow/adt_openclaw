@@ -7,7 +7,7 @@ export class OAClientError extends Error {
     this.name = "OAClientError";
     this.code = code;
     this.ambiguous = ambiguous;
-    /** 失败回执要带的额外字段（如 ALREADY_PENDING 的 confirmationId / sameSession），由 safeError 合并。 */
+    /** 失败回执要带的额外字段（如 confirmationId / sameSession），由 safeError 合并。 */
     this.details = details;
   }
 }
